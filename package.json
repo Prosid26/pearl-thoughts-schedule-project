@@ -10,13 +10,15 @@
     "test": "npx tsx scripts/test-workflow.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "npx tsx scripts/seed-neon.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
     "@supabase/supabase-js": "^2.118.0",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
+    "dotenv": "^18.0.9",
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.13",
     "lucide-react": "^1.62.0",
