@@ -34,6 +34,8 @@ export default function SignInPage() {
       if (res.data && typeof res.data === "object" && "role" in res.data) {
         if (res.data.role === "doctor") {
           router.push("/doctor/dashboard");
+        } else if (res.data.role === "admin") {
+          router.push("/reception/dashboard");
         } else {
           router.push("/patient/dashboard");
         }
@@ -65,7 +67,7 @@ export default function SignInPage() {
             Sign In to Pearl Thoughts
           </h1>
           <p className="text-xs text-slate-500">
-            Access your patient appointments or clinician schedule dashboard.
+            Access your patient appointments, doctor schedule, or reception queue.
           </p>
         </div>
 
@@ -79,27 +81,38 @@ export default function SignInPage() {
             <span className="text-[10px] text-slate-400">pwd: Password123!</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="grid grid-cols-3 gap-1.5 pt-1">
             <button
               type="button"
               onClick={() => handleFillDemo("patient@demo.com")}
-              className="px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white hover:bg-teal-50 text-slate-700 font-medium text-left truncate transition-colors"
+              className="px-2 py-1.5 rounded-lg border border-teal-200 bg-white hover:bg-teal-50 text-slate-700 font-medium text-left truncate transition-colors"
             >
-              <div className="font-bold text-[11px] text-teal-800 truncate">
+              <div className="font-bold text-[10px] text-teal-800 truncate">
                 Aarav Sharma
               </div>
-              <div className="text-[10px] text-slate-500">Patient Demo</div>
+              <div className="text-[9px] text-slate-500">Patient Demo</div>
             </button>
 
             <button
               type="button"
               onClick={() => handleFillDemo("doctor.ananya@demo.com")}
-              className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 text-slate-700 font-medium text-left truncate transition-colors"
+              className="px-2 py-1.5 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 text-slate-700 font-medium text-left truncate transition-colors"
             >
-              <div className="font-bold text-[11px] text-emerald-800 truncate">
-                Dr. Ananya Sharma
+              <div className="font-bold text-[10px] text-emerald-800 truncate">
+                Dr. Ananya
               </div>
-              <div className="text-[10px] text-slate-500">Cardiologist Demo</div>
+              <div className="text-[9px] text-slate-500">Doctor Demo</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleFillDemo("admin@demo.com")}
+              className="px-2 py-1.5 rounded-lg border border-blue-200 bg-white hover:bg-blue-50 text-slate-700 font-medium text-left truncate transition-colors"
+            >
+              <div className="font-bold text-[10px] text-blue-800 truncate">
+                Sunita D.
+              </div>
+              <div className="text-[9px] text-slate-500">Reception Demo</div>
             </button>
           </div>
         </div>

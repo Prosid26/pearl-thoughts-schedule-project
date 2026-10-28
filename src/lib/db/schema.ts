@@ -162,6 +162,123 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
   }),
 }));
 
+/**
+ * 6. WAITING QUEUE TABLE (Walk-in & Clinic Checked-in Patients)
+ */
+export const waitingQueue = pgTable("waiting_queue", {
+  queue_id: serial("queue_id").primaryKey(),
+  doctor_id: integer("doctor_id")
+    .notNull()
+    .references(() => doctors.doctor_id, { onDelete: "cascade" }),
+  patient_id: integer("patient_id").references(() => patients.patient_id, {
+    onDelete: "set null",
+  }),
+  patient_name: varchar("patient_name", { length: 150 }).notNull(),
+  patient_phone: varchar("patient_phone", { length: 30 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("waiting"), // waiting | called | in_consultation | completed | cancelled
+  check_in_time: timestamp("check_in_time", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  notes: text("notes"),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const waitingQueueRelations = relations(waitingQueue, ({ one }) => ({
+  doctor: one(doctors, {
+    fields: [waitingQueue.doctor_id],
+    references: [doctors.doctor_id],
+  }),
+  patient: one(patients, {
+    fields: [waitingQueue.patient_id],
+    references: [patients.patient_id],
+  }),
+}));
+
+/**
+ * 7. EARLY SLOT OFFERS TABLE (Smart Waiting Queue Offers)
+ */
+export const earlySlotOffers = pgTable("early_slot_offers", {
+  offer_id: serial("offer_id").primaryKey(),
+  slot_id: integer("slot_id")
+    .notNull()
+    .references(() => availability.availability_id, { onDelete: "cascade" }),
+  doctor_id: integer("doctor_id")
+    .notNull()
+    .references(() => doctors.doctor_id, { onDelete: "cascade" }),
+  patient_id: integer("patient_id")
+    .notNull()
+    .references(() => patients.patient_id, { onDelete: "cascade" }),
+  queue_id: integer("queue_id").references(() => waitingQueue.queue_id, {
+    onDelete: "set null",
+  }),
+  original_appointment_id: integer("original_appointment_id").references(
+    () => appointments.appointment_id,
+    { onDelete: "set null" }
+  ),
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | accepted | declined | expired | cancelled
+  offered_at: timestamp("offered_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  responded_at: timestamp("responded_at", { withTimezone: true }),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const earlySlotOffersRelations = relations(earlySlotOffers, ({ one }) => ({
+  slot: one(availability, {
+    fields: [earlySlotOffers.slot_id],
+    references: [availability.availability_id],
+  }),
+  doctor: one(doctors, {
+    fields: [earlySlotOffers.doctor_id],
+    references: [doctors.doctor_id],
+  }),
+  patient: one(patients, {
+    fields: [earlySlotOffers.patient_id],
+    references: [patients.patient_id],
+  }),
+  originalAppointment: one(appointments, {
+    fields: [earlySlotOffers.original_appointment_id],
+    references: [appointments.appointment_id],
+  }),
+}));
+
+/**
+ * 8. NOTIFICATIONS TABLE (In-App Patient Notifications)
+ */
+export const notifications = pgTable("notifications", {
+  notification_id: serial("notification_id").primaryKey(),
+  user_id: integer("user_id")
+    .notNull()
+    .references(() => users.user_id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 150 }).notNull(),
+  message: text("message").notNull(),
+  type: varchar("type", { length: 30 }).notNull().default("general"), // early_offer | offer_accepted | offer_expired | offer_declined | queue_update | general
+  related_offer_id: integer("related_offer_id").references(
+    () => earlySlotOffers.offer_id,
+    { onDelete: "set null" }
+  ),
+  is_read: boolean("is_read").notNull().default(false),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.user_id],
+    references: [users.user_id],
+  }),
+  offer: one(earlySlotOffers, {
+    fields: [notifications.related_offer_id],
+    references: [earlySlotOffers.offer_id],
+  }),
+}));
+
 export type UserSelect = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
 
@@ -176,3 +293,12 @@ export type AvailabilityInsert = typeof availability.$inferInsert;
 
 export type AppointmentSelect = typeof appointments.$inferSelect;
 export type AppointmentInsert = typeof appointments.$inferInsert;
+
+export type WaitingQueueSelect = typeof waitingQueue.$inferSelect;
+export type WaitingQueueInsert = typeof waitingQueue.$inferInsert;
+
+export type EarlySlotOfferSelect = typeof earlySlotOffers.$inferSelect;
+export type EarlySlotOfferInsert = typeof earlySlotOffers.$inferInsert;
+
+export type NotificationSelect = typeof notifications.$inferSelect;
+export type NotificationInsert = typeof notifications.$inferInsert;

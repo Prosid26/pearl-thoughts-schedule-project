@@ -8,6 +8,12 @@ import {
   Appointment,
   AppointmentStatus,
   UserRole,
+  WaitingQueueStatus,
+  WaitingQueueEntry,
+  EarlyOfferStatus,
+  EarlySlotOffer,
+  NotificationType,
+  InAppNotification,
 } from "@/types/database";
 
 interface DatabaseState {
@@ -16,12 +22,18 @@ interface DatabaseState {
   doctors: Doctor[];
   availability: Availability[];
   appointments: Appointment[];
+  waitingQueue: WaitingQueueEntry[];
+  earlySlotOffers: EarlySlotOffer[];
+  notifications: InAppNotification[];
   counters: {
     userId: number;
     patientId: number;
     doctorId: number;
     availabilityId: number;
     appointmentId: number;
+    queueId: number;
+    offerId: number;
+    notificationId: number;
   };
 }
 
@@ -132,6 +144,15 @@ function generateInitialSeed(): DatabaseState {
       phone: "+91 98208 90123",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "doctor",
+      created_at: new Date().toISOString(),
+    },
+    {
+      user_id: 11,
+      full_name: "Sunita Deshpande",
+      email: "admin@demo.com",
+      phone: "+91 98200 99887",
+      password_hash: DEFAULT_PASSWORD_HASH,
+      role: "admin",
       created_at: new Date().toISOString(),
     },
   ];
@@ -506,18 +527,38 @@ function generateInitialSeed(): DatabaseState {
     },
   ];
 
+  const waitingQueue: WaitingQueueEntry[] = [
+    {
+      queue_id: 1,
+      doctor_id: 1,
+      patient_id: null,
+      patient_name: "Vikram Malhotra",
+      patient_phone: "+91 98111 22334",
+      status: "waiting",
+      check_in_time: new Date().toISOString(),
+      notes: "Walk-in check-in. Routine cardiac check-up.",
+      created_at: new Date().toISOString(),
+    },
+  ];
+
   return {
     users,
     patients,
     doctors,
     availability,
     appointments,
+    waitingQueue,
+    earlySlotOffers: [],
+    notifications: [],
     counters: {
-      userId: 10,
+      userId: 11,
       patientId: 2,
       doctorId: 8,
       availabilityId: 24,
       appointmentId: 1,
+      queueId: 1,
+      offerId: 0,
+      notificationId: 0,
     },
   };
 }
@@ -547,6 +588,25 @@ class LocalDatabase {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed.users && parsed.doctors && parsed.appointments) {
+          if (!parsed.waitingQueue) parsed.waitingQueue = [];
+          if (!parsed.earlySlotOffers) parsed.earlySlotOffers = [];
+          if (!parsed.notifications) parsed.notifications = [];
+          if (!parsed.counters) parsed.counters = {};
+          if (!parsed.counters.queueId) parsed.counters.queueId = parsed.waitingQueue.length;
+          if (!parsed.counters.offerId) parsed.counters.offerId = parsed.earlySlotOffers.length;
+          if (!parsed.counters.notificationId) parsed.counters.notificationId = parsed.notifications.length;
+          if (!parsed.users.some((u: User) => u.email === "admin@demo.com")) {
+            parsed.users.push({
+              user_id: 11,
+              full_name: "Sunita Deshpande",
+              email: "admin@demo.com",
+              phone: "+91 98200 99887",
+              password_hash: DEFAULT_PASSWORD_HASH,
+              role: "admin",
+              created_at: new Date().toISOString(),
+            });
+            if (parsed.counters.userId < 11) parsed.counters.userId = 11;
+          }
           return parsed;
         }
       }
@@ -1098,6 +1158,557 @@ class LocalDatabase {
     );
     if (!app) return undefined;
     return this.hydrateAppointment(app);
+  }
+
+  // --- Waiting Queue Methods ---
+  public addToWaitingQueue(params: {
+    doctorId: number;
+    patientId?: number | null;
+    patientName: string;
+    patientPhone: string;
+    notes?: string;
+  }): WaitingQueueEntry {
+    this.state.counters.queueId += 1;
+    const entry: WaitingQueueEntry = {
+      queue_id: this.state.counters.queueId,
+      doctor_id: params.doctorId,
+      patient_id: params.patientId || null,
+      patient_name: params.patientName.trim(),
+      patient_phone: params.patientPhone.trim(),
+      status: "waiting",
+      check_in_time: new Date().toISOString(),
+      notes: params.notes?.trim() || null,
+      created_at: new Date().toISOString(),
+    };
+    this.state.waitingQueue.push(entry);
+    this.commit();
+    return this.hydrateWaitingQueue(entry);
+  }
+
+  public getWaitingQueue(
+    doctorId?: number,
+    status?: WaitingQueueStatus
+  ): WaitingQueueEntry[] {
+    return this.state.waitingQueue
+      .filter((q) => {
+        if (doctorId && q.doctor_id !== doctorId) return false;
+        if (status && q.status !== status) return false;
+        return true;
+      })
+      .map((q) => this.hydrateWaitingQueue(q))
+      .sort(
+        (a, b) =>
+          new Date(a.check_in_time).getTime() -
+          new Date(b.check_in_time).getTime()
+      );
+  }
+
+  public getWaitingQueueById(queueId: number): WaitingQueueEntry | undefined {
+    const entry = this.state.waitingQueue.find((q) => q.queue_id === queueId);
+    if (!entry) return undefined;
+    return this.hydrateWaitingQueue(entry);
+  }
+
+  public updateWaitingQueueStatus(
+    queueId: number,
+    status: WaitingQueueStatus
+  ): WaitingQueueEntry {
+    const entry = this.state.waitingQueue.find((q) => q.queue_id === queueId);
+    if (!entry) throw new Error("Waiting queue entry not found");
+    entry.status = status;
+    this.commit();
+    return this.hydrateWaitingQueue(entry);
+  }
+
+  // --- In-App Notifications ---
+  public createNotification(params: {
+    userId: number;
+    title: string;
+    message: string;
+    type: NotificationType;
+    relatedOfferId?: number;
+  }): InAppNotification {
+    this.state.counters.notificationId += 1;
+    const notif: InAppNotification = {
+      notification_id: this.state.counters.notificationId,
+      user_id: params.userId,
+      title: params.title,
+      message: params.message,
+      type: params.type,
+      related_offer_id: params.relatedOfferId || null,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    this.state.notifications.push(notif);
+    this.commit();
+    return this.hydrateNotification(notif);
+  }
+
+  public getNotificationsForUser(userId: number): InAppNotification[] {
+    return this.state.notifications
+      .filter((n) => n.user_id === userId)
+      .map((n) => this.hydrateNotification(n))
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+  }
+
+  public markNotificationRead(notificationId: number, userId: number): boolean {
+    const notif = this.state.notifications.find(
+      (n) => n.notification_id === notificationId && n.user_id === userId
+    );
+    if (!notif) return false;
+    notif.is_read = true;
+    this.commit();
+    return true;
+  }
+
+  // --- Early Slot Offers ---
+  public createEarlySlotOffer(params: {
+    slotId: number;
+    doctorId: number;
+    patientId: number;
+    queueId?: number | null;
+    originalAppointmentId?: number | null;
+    responseWindowMinutes?: number;
+  }): EarlySlotOffer {
+    // Prevent duplicate active offer for same patient
+    const existingActive = this.state.earlySlotOffers.find(
+      (o) =>
+        o.patient_id === params.patientId &&
+        o.status === "pending" &&
+        new Date(o.expires_at).getTime() > Date.now()
+    );
+    if (existingActive) {
+      throw new Error("Patient already has an active pending offer.");
+    }
+
+    const windowMinutes = params.responseWindowMinutes || 2; // Default 2 minutes
+    const expiresAt = new Date(Date.now() + windowMinutes * 60 * 1000).toISOString();
+
+    this.state.counters.offerId += 1;
+    const offer: EarlySlotOffer = {
+      offer_id: this.state.counters.offerId,
+      slot_id: params.slotId,
+      doctor_id: params.doctorId,
+      patient_id: params.patientId,
+      queue_id: params.queueId || null,
+      original_appointment_id: params.originalAppointmentId || null,
+      status: "pending",
+      offered_at: new Date().toISOString(),
+      expires_at: expiresAt,
+      responded_at: null,
+      created_at: new Date().toISOString(),
+    };
+    this.state.earlySlotOffers.push(offer);
+
+    // Create In-App Notification for patient
+    const patient = this.getPatientById(params.patientId);
+    const doctor = this.getDoctorById(params.doctorId);
+    const slot = this.getAvailabilityById(params.slotId);
+
+    if (patient?.user_id) {
+      this.createNotification({
+        userId: patient.user_id,
+        title: "Earlier Appointment Slot Available!",
+        message: `Dr. ${doctor?.user?.full_name || "Doctor"} finished an appointment early. An earlier slot is available on ${slot?.available_date} at ${slot?.start_time}. You have 2 minutes to respond.`,
+        type: "early_offer",
+        relatedOfferId: offer.offer_id,
+      });
+    }
+
+    this.commit();
+    return this.hydrateEarlySlotOffer(offer);
+  }
+
+  public getActiveOfferForPatient(patientId: number): EarlySlotOffer | null {
+    // Check and expire any overdue offers
+    for (const o of this.state.earlySlotOffers) {
+      if (
+        o.patient_id === patientId &&
+        o.status === "pending" &&
+        new Date(o.expires_at).getTime() <= Date.now()
+      ) {
+        o.status = "expired";
+        this.commit();
+        this.advanceOfferToNextEligiblePatient(o.slot_id, o.doctor_id);
+      }
+    }
+
+    const active = this.state.earlySlotOffers.find(
+      (o) =>
+        o.patient_id === patientId &&
+        o.status === "pending" &&
+        new Date(o.expires_at).getTime() > Date.now()
+    );
+
+    return active ? this.hydrateEarlySlotOffer(active) : null;
+  }
+
+  public getOffersForDoctor(doctorId: number): EarlySlotOffer[] {
+    return this.state.earlySlotOffers
+      .filter((o) => o.doctor_id === doctorId)
+      .map((o) => this.hydrateEarlySlotOffer(o))
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+  }
+
+  public getAllOffers(): EarlySlotOffer[] {
+    return this.state.earlySlotOffers
+      .map((o) => this.hydrateEarlySlotOffer(o))
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+  }
+
+  public getOfferById(offerId: number): EarlySlotOffer | undefined {
+    const offer = this.state.earlySlotOffers.find((o) => o.offer_id === offerId);
+    if (!offer) return undefined;
+    return this.hydrateEarlySlotOffer(offer);
+  }
+
+  public acceptEarlySlotOfferAtomic(
+    offerId: number,
+    patientUserId: number
+  ): { success: boolean; appointment: Appointment; offer: EarlySlotOffer } {
+    const offer = this.state.earlySlotOffers.find((o) => o.offer_id === offerId);
+    if (!offer) {
+      throw new Error("Offer not found.");
+    }
+    if (offer.status !== "pending") {
+      throw new Error(`Offer is already ${offer.status}.`);
+    }
+    if (new Date(offer.expires_at).getTime() <= Date.now()) {
+      offer.status = "expired";
+      this.commit();
+      this.advanceOfferToNextEligiblePatient(offer.slot_id, offer.doctor_id);
+      throw new Error("This offer has expired.");
+    }
+
+    const patient = this.getPatientById(offer.patient_id);
+    if (!patient || patient.user_id !== patientUserId) {
+      throw new Error("Unauthorized to accept this offer.");
+    }
+
+    const newSlot = this.getAvailabilityById(offer.slot_id);
+    if (!newSlot) {
+      throw new Error("Target availability slot not found.");
+    }
+
+    let finalAppointment: Appointment;
+
+    if (offer.original_appointment_id) {
+      // Scheduled patient reschedule: update appointment to new slot, free old slot
+      const originalApp = this.state.appointments.find(
+        (a) => a.appointment_id === offer.original_appointment_id
+      );
+      if (!originalApp) {
+        throw new Error("Original appointment record not found.");
+      }
+
+      // Free previous slot
+      const oldSlot = this.getAvailabilityById(originalApp.availability_id);
+      if (oldSlot) {
+        oldSlot.is_available = true;
+      }
+
+      // Move to new slot safely
+      originalApp.availability_id = offer.slot_id;
+      originalApp.appointment_date = `${newSlot.available_date}T${newSlot.start_time}:00.000Z`;
+      originalApp.status = "confirmed";
+      newSlot.is_available = false;
+
+      finalAppointment = originalApp;
+    } else if (offer.queue_id) {
+      // Walk-in queue patient: convert to confirmed appointment on this slot
+      const queueEntry = this.state.waitingQueue.find(
+        (q) => q.queue_id === offer.queue_id
+      );
+      if (queueEntry) {
+        queueEntry.status = "in_consultation";
+      }
+
+      newSlot.is_available = false;
+      this.state.counters.appointmentId += 1;
+      const createdApp: Appointment = {
+        appointment_id: this.state.counters.appointmentId,
+        patient_id: offer.patient_id,
+        doctor_id: offer.doctor_id,
+        availability_id: offer.slot_id,
+        appointment_date: `${newSlot.available_date}T${newSlot.start_time}:00.000Z`,
+        status: "confirmed",
+        reason: queueEntry?.notes || "Early Waiting Queue Consultation",
+        created_at: new Date().toISOString(),
+      };
+      this.state.appointments.push(createdApp);
+      finalAppointment = createdApp;
+    } else {
+      // General patient acceptance
+      newSlot.is_available = false;
+      this.state.counters.appointmentId += 1;
+      const createdApp: Appointment = {
+        appointment_id: this.state.counters.appointmentId,
+        patient_id: offer.patient_id,
+        doctor_id: offer.doctor_id,
+        availability_id: offer.slot_id,
+        appointment_date: `${newSlot.available_date}T${newSlot.start_time}:00.000Z`,
+        status: "confirmed",
+        reason: "Early Slot Fast-Track Offer Accepted",
+        created_at: new Date().toISOString(),
+      };
+      this.state.appointments.push(createdApp);
+      finalAppointment = createdApp;
+    }
+
+    offer.status = "accepted";
+    offer.responded_at = new Date().toISOString();
+
+    // Confirmation notification
+    this.createNotification({
+      userId: patient.user_id,
+      title: "Earlier Slot Confirmed!",
+      message: `Your earlier appointment with Dr. ${
+        newSlot.doctor_id ? "your doctor" : "Doctor"
+      } is confirmed for ${newSlot.available_date} at ${newSlot.start_time}.`,
+      type: "offer_accepted",
+      relatedOfferId: offer.offer_id,
+    });
+
+    this.commit();
+    return {
+      success: true,
+      appointment: this.hydrateAppointment(finalAppointment),
+      offer: this.hydrateEarlySlotOffer(offer),
+    };
+  }
+
+  public declineEarlySlotOffer(
+    offerId: number,
+    patientUserId: number
+  ): { success: boolean } {
+    const offer = this.state.earlySlotOffers.find((o) => o.offer_id === offerId);
+    if (!offer) {
+      throw new Error("Offer not found.");
+    }
+    const patient = this.getPatientById(offer.patient_id);
+    if (!patient || patient.user_id !== patientUserId) {
+      throw new Error("Unauthorized to decline this offer.");
+    }
+
+    if (offer.status === "pending") {
+      offer.status = "declined";
+      offer.responded_at = new Date().toISOString();
+      this.commit();
+
+      // Offer to next eligible patient automatically
+      this.advanceOfferToNextEligiblePatient(offer.slot_id, offer.doctor_id);
+    }
+
+    return { success: true };
+  }
+
+  public findNextEligiblePatientForSlot(
+    slotId: number,
+    doctorId: number
+  ): {
+    patientId: number;
+    queueId?: number | null;
+    originalAppointmentId?: number | null;
+  } | null {
+    const slot = this.getAvailabilityById(slotId);
+    if (!slot) return null;
+    const slotDateTime = new Date(`${slot.available_date}T${slot.start_time}:00.000Z`);
+
+    // 1. Priority: Patients waiting at clinic in waiting_queue
+    const waitingAtClinic = this.state.waitingQueue.filter(
+      (w) =>
+        w.doctor_id === doctorId &&
+        w.status === "waiting" &&
+        w.patient_id !== null &&
+        !this.state.earlySlotOffers.some(
+          (o) => o.slot_id === slotId && o.patient_id === w.patient_id
+        )
+    );
+
+    if (waitingAtClinic.length > 0) {
+      const candidate = waitingAtClinic[0];
+      return {
+        patientId: candidate.patient_id!,
+        queueId: candidate.queue_id,
+      };
+    }
+
+    // 2. Priority: Next scheduled patients for that doctor
+    const scheduledPatients = this.state.appointments
+      .filter((a) => {
+        if (a.doctor_id !== doctorId) return false;
+        if (a.status !== "confirmed" && a.status !== "pending") return false;
+        if (new Date(a.appointment_date).getTime() <= slotDateTime.getTime()) return false;
+        // Check if patient already received an offer for this slot
+        const alreadyOfferedThisSlot = this.state.earlySlotOffers.some(
+          (o) => o.slot_id === slotId && o.patient_id === a.patient_id
+        );
+        if (alreadyOfferedThisSlot) return false;
+        // Check if patient currently has an active pending offer elsewhere
+        const hasActivePendingOffer = this.state.earlySlotOffers.some(
+          (o) =>
+            o.patient_id === a.patient_id &&
+            o.status === "pending" &&
+            new Date(o.expires_at).getTime() > Date.now()
+        );
+        if (hasActivePendingOffer) return false;
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.appointment_date).getTime() -
+          new Date(b.appointment_date).getTime()
+      );
+
+    if (scheduledPatients.length > 0) {
+      const candidate = scheduledPatients[0];
+      return {
+        patientId: candidate.patient_id,
+        originalAppointmentId: candidate.appointment_id,
+      };
+    }
+
+    return null;
+  }
+
+  public advanceOfferToNextEligiblePatient(
+    slotId: number,
+    doctorId: number
+  ): EarlySlotOffer | null {
+    const candidate = this.findNextEligiblePatientForSlot(slotId, doctorId);
+    if (candidate) {
+      return this.createEarlySlotOffer({
+        slotId,
+        doctorId,
+        patientId: candidate.patientId,
+        queueId: candidate.queueId,
+        originalAppointmentId: candidate.originalAppointmentId,
+        responseWindowMinutes: 2,
+      });
+    } else {
+      // No eligible patients remaining: make slot available for normal booking
+      const slot = this.getAvailabilityById(slotId);
+      if (slot) {
+        slot.is_available = true;
+        this.commit();
+      }
+      return null;
+    }
+  }
+
+  public completeConsultationAndCheckEarlyOffer(
+    appointmentId: number,
+    doctorUserId: number
+  ): {
+    appointment: Appointment;
+    earlySlotOffered: boolean;
+    offer?: EarlySlotOffer;
+    message: string;
+  } {
+    const app = this.state.appointments.find(
+      (a) => a.appointment_id === appointmentId
+    );
+    if (!app) throw new Error("Appointment not found");
+
+    const doctor = this.getDoctorById(app.doctor_id);
+    if (!doctor || doctor.user_id !== doctorUserId) {
+      throw new Error("Unauthorized: Only the attending doctor can complete this appointment.");
+    }
+
+    app.status = "completed";
+    this.commit();
+
+    const appDateStr = (
+      typeof app.appointment_date === "string"
+        ? app.appointment_date
+        : (app.appointment_date as any).toISOString()
+    ).split("T")[0];
+
+    // Look for an early slot opportunity for this doctor on or after the consultation date
+    const availableSlots = this.state.availability
+      .filter(
+        (s) =>
+          s.doctor_id === doctor.doctor_id &&
+          s.is_available &&
+          s.available_date >= appDateStr
+      )
+      .sort((a, b) => {
+        const da = new Date(`${a.available_date}T${a.start_time}:00Z`).getTime();
+        const db = new Date(`${b.available_date}T${b.start_time}:00Z`).getTime();
+        return da - db;
+      });
+
+    let createdOffer: EarlySlotOffer | null = null;
+    if (availableSlots.length > 0) {
+      const targetSlot = availableSlots[0];
+      // Check if slot has active pending offer
+      const activeOffer = this.state.earlySlotOffers.find(
+        (o) =>
+          o.slot_id === targetSlot.availability_id &&
+          o.status === "pending" &&
+          new Date(o.expires_at).getTime() > Date.now()
+      );
+      if (!activeOffer) {
+        createdOffer = this.advanceOfferToNextEligiblePatient(
+          targetSlot.availability_id,
+          doctor.doctor_id
+        );
+      }
+    }
+
+    return {
+      appointment: this.hydrateAppointment(app),
+      earlySlotOffered: Boolean(createdOffer),
+      offer: createdOffer ? this.hydrateEarlySlotOffer(createdOffer) : undefined,
+      message: createdOffer
+        ? "Consultation completed. Earlier slot detected and offered to next eligible patient!"
+        : "Consultation marked as completed.",
+    };
+  }
+
+  private hydrateWaitingQueue(item: WaitingQueueEntry): WaitingQueueEntry {
+    const doctor = this.getDoctorById(item.doctor_id);
+    const patient = item.patient_id ? this.getPatientById(item.patient_id) : undefined;
+    return {
+      ...item,
+      doctor,
+      patient,
+    };
+  }
+
+  private hydrateEarlySlotOffer(offer: EarlySlotOffer): EarlySlotOffer {
+    const doctor = this.getDoctorById(offer.doctor_id);
+    const patient = this.getPatientById(offer.patient_id);
+    const slot = this.getAvailabilityById(offer.slot_id);
+    const originalAppointment = offer.original_appointment_id
+      ? this.getAppointmentById(offer.original_appointment_id)
+      : undefined;
+    return {
+      ...offer,
+      doctor,
+      patient,
+      slot,
+      original_appointment: originalAppointment,
+    };
+  }
+
+  private hydrateNotification(notif: InAppNotification): InAppNotification {
+    const offer = notif.related_offer_id
+      ? this.getOfferById(notif.related_offer_id)
+      : undefined;
+    return {
+      ...notif,
+      offer,
+    };
   }
 
   private hydrateAppointment(app: Appointment): Appointment {

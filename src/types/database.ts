@@ -75,3 +75,69 @@ export interface SessionUser {
   patient_id?: number | null;
   doctor_id?: number | null;
 }
+
+export type WaitingQueueStatus =
+  | "waiting"
+  | "called"
+  | "in_consultation"
+  | "completed"
+  | "cancelled";
+
+export interface WaitingQueueEntry {
+  queue_id: number;
+  doctor_id: number;
+  patient_id?: number | null;
+  patient_name: string;
+  patient_phone: string;
+  status: WaitingQueueStatus;
+  check_in_time: string; // ISO datetime
+  notes?: string | null;
+  created_at: string;
+  doctor?: Doctor & { user?: Pick<User, "full_name" | "email" | "phone"> };
+  patient?: Patient & { user?: Pick<User, "full_name" | "email" | "phone"> };
+}
+
+export type EarlyOfferStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "expired"
+  | "cancelled";
+
+export interface EarlySlotOffer {
+  offer_id: number;
+  slot_id: number;
+  doctor_id: number;
+  patient_id: number;
+  queue_id?: number | null;
+  original_appointment_id?: number | null;
+  status: EarlyOfferStatus;
+  offered_at: string;
+  expires_at: string;
+  responded_at?: string | null;
+  created_at: string;
+  slot?: Availability;
+  doctor?: Doctor & { user?: Pick<User, "full_name" | "email" | "phone"> };
+  patient?: Patient & { user?: Pick<User, "full_name" | "email" | "phone"> };
+  original_appointment?: Appointment;
+}
+
+export type NotificationType =
+  | "early_offer"
+  | "offer_accepted"
+  | "offer_expired"
+  | "offer_declined"
+  | "queue_update"
+  | "general";
+
+export interface InAppNotification {
+  notification_id: number;
+  user_id: number;
+  title: string;
+  message: string;
+  type: NotificationType;
+  related_offer_id?: number | null;
+  is_read: boolean;
+  created_at: string;
+  offer?: EarlySlotOffer;
+}

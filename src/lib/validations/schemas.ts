@@ -125,3 +125,38 @@ export const updateDoctorProfileSchema = z.object({
   bio: z.string().optional(),
   clinic_address: z.string().optional(),
 });
+
+export const addToWaitingQueueSchema = z.object({
+  doctor_id: z.coerce.number().int().positive("Please select a doctor"),
+  patient_id: z.coerce.number().int().positive().optional().nullable(),
+  patient_name: z
+    .string()
+    .trim()
+    .min(2, "Patient full name is required (min 2 characters)")
+    .max(150),
+  patient_phone: z
+    .string()
+    .trim()
+    .min(8, "Phone number is too short")
+    .max(25, "Phone number is too long"),
+  notes: z.string().trim().max(500, "Notes cannot exceed 500 characters").optional(),
+});
+
+export const updateWaitingQueueStatusSchema = z.object({
+  queue_id: z.coerce.number().int().positive(),
+  status: z.enum([
+    "waiting",
+    "called",
+    "in_consultation",
+    "completed",
+    "cancelled",
+  ]),
+});
+
+export const earlyOfferActionSchema = z.object({
+  offer_id: z.coerce.number().int().positive("Invalid offer ID"),
+});
+
+export const completeConsultationSchema = z.object({
+  appointment_id: z.coerce.number().int().positive("Invalid appointment ID"),
+});

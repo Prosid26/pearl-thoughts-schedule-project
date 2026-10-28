@@ -14,6 +14,8 @@ import {
   ArrowRight,
   PlusCircle,
 } from "lucide-react";
+import { EarlySlotOfferBanner } from "@/components/patient/EarlySlotOfferBanner";
+import { PatientNotificationsPanel } from "@/components/patient/PatientNotificationsPanel";
 
 export default async function PatientDashboardPage() {
   const session = await getSession();
@@ -25,6 +27,7 @@ export default async function PatientDashboardPage() {
   }
 
   const appointments = await db.getAppointmentsForPatient(session.patient_id);
+  const initialOffer = await db.getActiveOfferForPatient(session.patient_id);
 
   const upcomingAppointments = appointments.filter(
     (a) =>
@@ -69,6 +72,9 @@ export default async function PatientDashboardPage() {
         </div>
       </div>
 
+      {/* Active Early Slot Offer Banner with Live 2-Min Countdown */}
+      <EarlySlotOfferBanner initialOffer={initialOffer} />
+
       {/* Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -111,6 +117,9 @@ export default async function PatientDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* In-App Notifications Center */}
+      <PatientNotificationsPanel />
 
       {/* Next Upcoming Appointment Highlight */}
       {nextAppointment ? (

@@ -10,9 +10,13 @@ import {
   Calendar,
   AlertCircle,
   PlusCircle,
+  Sparkles,
+  Users,
+  Clock,
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
+import { formatISTDate, formatTime12h } from "@/lib/utils/date";
 
 export default async function DoctorDashboardPage() {
   const session = await getSession();
@@ -25,6 +29,8 @@ export default async function DoctorDashboardPage() {
 
   const doctor = await db.getDoctorById(session.doctor_id);
   const appointments = await db.getAppointmentsForDoctor(session.doctor_id);
+  const waitingQueue = await db.getWaitingQueue(session.doctor_id, "waiting");
+  const earlyOffers = await db.getOffersForDoctor(session.doctor_id);
 
   const pendingAppointments = appointments.filter(
     (a) => a.status === "pending"
@@ -34,6 +40,10 @@ export default async function DoctorDashboardPage() {
   );
   const completedAppointments = appointments.filter(
     (a) => a.status === "completed"
+  );
+
+  const activeOffers = earlyOffers.filter(
+    (o) => o.status === "pending" && new Date(o.expires_at) > new Date()
   );
 
   return (
@@ -116,6 +126,86 @@ export default async function DoctorDashboardPage() {
           <div className="text-2xl font-black text-emerald-800 mt-1">
             {completedAppointments.length}
           </div>
+        </div>
+      </div>
+
+      {/* Smart Early Slot Offers & Clinic Waiting Queue Alerts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Active Early Slot Offer in Progress */}
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-teal-900 to-slate-900 text-white shadow-md space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-800/80 text-teal-200 border border-teal-700/60">
+              <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+              <span>Smart Early Slot Automation</span>
+            </span>
+            <span className="text-[11px] font-medium text-slate-300">
+              {activeOffers.length} Active Offer{activeOffers.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {activeOffers.length > 0 ? (
+            <div className="space-y-2 pt-1">
+              {activeOffers.map((offer) => (
+                <div
+                  key={offer.offer_id}
+                  className="p-3 rounded-2xl bg-white/10 border border-white/10 text-xs space-y-1"
+                >
+                  <div className="flex items-center justify-between font-bold text-teal-200">
+                    <span>
+                      Offered to: {offer.patient?.user?.full_name || "Patient"}
+                    </span>
+                    <span className="text-[10px] bg-teal-500/30 text-teal-200 px-2 py-0.5 rounded-full">
+                      2-min window
+                    </span>
+                  </div>
+                  <div className="text-slate-300">
+                    Earlier Slot: {offer.slot?.available_date} @{" "}
+                    {offer.slot?.start_time ? formatTime12h(offer.slot.start_time) : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-300 pt-1">
+              Completing a consultation early automatically detects available slots
+              and initiates a 2-minute countdown offer to the next eligible patient in the queue.
+            </div>
+          )}
+        </div>
+
+        {/* Clinic Waiting Queue Status */}
+        <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+              <Users className="w-4 h-4 text-teal-600" />
+              <span>Clinic Walk-in Queue</span>
+            </div>
+            <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
+              {waitingQueue.length} Patient{waitingQueue.length !== 1 ? "s" : ""} Waiting
+            </span>
+          </div>
+
+          {waitingQueue.length > 0 ? (
+            <div className="divide-y divide-slate-100 text-xs">
+              {waitingQueue.slice(0, 2).map((item) => (
+                <div key={item.queue_id} className="py-2 flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-slate-900">{item.patient_name}</div>
+                    <div className="text-[11px] text-slate-500">
+                      Checked in: {new Date(item.check_in_time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 uppercase">
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500 pt-1">
+              No walk-in patients currently checked in at the reception desk for your clinic.
+            </div>
+          )}
         </div>
       </div>
 

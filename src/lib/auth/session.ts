@@ -81,3 +81,11 @@ export async function requireDoctor(): Promise<
   }
   return user as SessionUser & { doctor_id: number };
 }
+
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role !== "admin") {
+    throw new Error("Access Denied: Reception and staff privileges required.");
+  }
+  return user;
+}

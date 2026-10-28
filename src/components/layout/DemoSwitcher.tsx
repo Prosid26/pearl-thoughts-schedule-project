@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { signInAction } from "@/app/actions/auth.actions";
-import { KeyRound, User, Stethoscope, ChevronDown, Loader2 } from "lucide-react";
+import { KeyRound, User, Stethoscope, ChevronDown, Loader2, Building } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function DemoSwitcher() {
@@ -23,6 +23,8 @@ export function DemoSwitcher() {
       if (res.data && typeof res.data === "object" && "role" in res.data) {
         if (res.data.role === "doctor") {
           router.push("/doctor/dashboard");
+        } else if (res.data.role === "admin") {
+          router.push("/reception/dashboard");
         } else {
           router.push("/patient/dashboard");
         }
@@ -200,6 +202,33 @@ export function DemoSwitcher() {
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
                 ) : (
                   <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 font-medium">
+                    Login →
+                  </span>
+                )}
+              </button>
+
+              {/* Reception Staff */}
+              <div className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 px-1 pt-2 border-t border-slate-100">
+                <Building className="w-3 h-3 text-blue-600" /> Reception & Waiting Queue
+              </div>
+
+              <button
+                disabled={loadingEmail !== null}
+                onClick={() => handleQuickLogin("admin@demo.com")}
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-blue-50 hover:text-blue-900 border border-transparent hover:border-blue-200 transition-all group"
+              >
+                <div>
+                  <div className="font-medium text-slate-800 group-hover:text-blue-900">
+                    Sunita Deshpande (Reception)
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Admin Staff • admin@demo.com
+                  </div>
+                </div>
+                {loadingEmail === "admin@demo.com" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                ) : (
+                  <span className="text-[10px] text-blue-600 opacity-0 group-hover:opacity-100 font-medium">
                     Login →
                   </span>
                 )}

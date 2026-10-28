@@ -159,6 +159,251 @@ async function runTestSuite() {
   const deleted = localDb.deleteAvailabilitySlot(addedSlot.availability_id, targetDoctor.doctor_id);
   assert(deleted === true, "Doctor successfully deleted the unused availability slot");
 
+  // =========================================================================
+  // SMART WAITING QUEUE & EARLY APPOINTMENT AVAILABILITY TESTS
+  // =========================================================================
+
+  // TEST 10: Reception Waiting Queue Walk-In Check-In & State Transitions
+  console.log("\nTEST 10: Reception Waiting Queue Management (Walk-Ins)");
+  const walkInPatient = localDb.addToWaitingQueue({
+    doctorId: targetDoctor.doctor_id,
+    patientId: null, // Unregistered walk-in
+    patientName: "Vikram Malhotra",
+    patientPhone: "+91 98111 22334",
+    notes: "Triage: Walk-in with persistent headache & elevated BP",
+  });
+  assert(walkInPatient.queue_id > 0, "Reception staff checked in walk-in patient to queue");
+  assert(walkInPatient.status === "waiting", "Walk-in patient starts in 'waiting' status");
+
+  // Transition queue: waiting -> called -> in_consultation -> completed
+  const calledEntry = localDb.updateWaitingQueueStatus(walkInPatient.queue_id, "called");
+  assert(calledEntry.status === "called", "Reception marked patient as 'called'");
+
+  const consultEntry = localDb.updateWaitingQueueStatus(walkInPatient.queue_id, "in_consultation");
+  assert(consultEntry.status === "in_consultation", "Queue entry marked 'in_consultation'");
+
+  const completedEntry = localDb.updateWaitingQueueStatus(walkInPatient.queue_id, "completed");
+  assert(completedEntry.status === "completed", "Queue entry marked 'completed'");
+
+  // TEST 11: Complete Consultation with Early Slot Opportunity Detection
+  console.log("\nTEST 11: Complete Consultation & Smart Early Slot Offer Process");
+  // Setup: create an available slot earlier for doctor
+  const dEarly = new Date();
+  dEarly.setDate(dEarly.getDate() + 30 + Math.floor(Math.random() * 500));
+  const earlyDate = dEarly.toISOString().split("T")[0];
+
+  const earlySlot = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    earlyDate,
+    "09:00",
+    "09:30",
+    30
+  );
+
+  // Setup scheduled patient 1 (scheduled at 15:00)
+  const userPatient1 = localDb.createUser(
+    "Rohit Deshmukh",
+    `rohit.${Date.now()}@testmed.com`,
+    "+91 98200 88990",
+    hash,
+    "patient"
+  );
+  const patient1 = localDb.createPatient(userPatient1.user_id, "1988-03-20", "Male", "Mumbai");
+
+  const laterSlot1 = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    earlyDate,
+    "15:00",
+    "15:30",
+    30
+  );
+  const appPatient1 = localDb.bookAppointmentAtomic({
+    patientId: patient1.patient_id,
+    doctorId: targetDoctor.doctor_id,
+    availabilityId: laterSlot1.availability_id,
+    reason: "Scheduled follow-up appointment.",
+  });
+  localDb.updateAppointmentStatus({
+    appointmentId: appPatient1.appointment_id,
+    newStatus: "confirmed",
+    requesterUserId: targetDoctor.user_id,
+    requesterRole: "doctor",
+  });
+
+  // Setup scheduled patient 2 (scheduled later at 17:00 - eligible for cascade)
+  const userPatient2 = localDb.createUser(
+    "Anita Deshmukh",
+    `anita.${Date.now()}@testmed.com`,
+    "+91 98200 88991",
+    hash,
+    "patient"
+  );
+  const patient2 = localDb.createPatient(userPatient2.user_id, "1992-07-15", "Female", "Mumbai");
+
+  const laterSlot2 = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    earlyDate,
+    "17:00",
+    "17:30",
+    30
+  );
+  const appPatient2 = localDb.bookAppointmentAtomic({
+    patientId: patient2.patient_id,
+    doctorId: targetDoctor.doctor_id,
+    availabilityId: laterSlot2.availability_id,
+    reason: "Late afternoon consultation.",
+  });
+  localDb.updateAppointmentStatus({
+    appointmentId: appPatient2.appointment_id,
+    newStatus: "confirmed",
+    requesterUserId: targetDoctor.user_id,
+    requesterRole: "doctor",
+  });
+
+  // Setup active appointment currently with doctor to complete early
+  const currentSlot = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    earlyDate,
+    "08:00",
+    "08:30",
+    30
+  );
+  const activeApp = localDb.bookAppointmentAtomic({
+    patientId: newPatient.patient_id,
+    doctorId: targetDoctor.doctor_id,
+    availabilityId: currentSlot.availability_id,
+    reason: "Early morning ECG review.",
+  });
+  localDb.updateAppointmentStatus({
+    appointmentId: activeApp.appointment_id,
+    newStatus: "confirmed",
+    requesterUserId: targetDoctor.user_id,
+    requesterRole: "doctor",
+  });
+
+  // Doctor completes consultation early
+  const completeResult = localDb.completeConsultationAndCheckEarlyOffer(
+    activeApp.appointment_id,
+    targetDoctor.user_id
+  );
+  assert(
+    completeResult.appointment.status === "completed",
+    "Doctor consultation updated to 'completed' status"
+  );
+  assert(
+    completeResult.earlySlotOffered === true,
+    "System detected earlier available slot and initiated offer"
+  );
+
+  // TEST 12: In-App Notification & Active Offer Countdown for Patient
+  console.log("\nTEST 12: Patient Notification & 2-Minute Response Countdown");
+  const offeredPatientId = completeResult.offer!.patient_id;
+  const activeOffer = localDb.getActiveOfferForPatient(offeredPatientId);
+  assert(activeOffer !== null, "Next eligible scheduled patient received an active offer");
+  assert(activeOffer?.status === "pending", "Offer starts in 'pending' status");
+  assert(
+    activeOffer?.offer_id === completeResult.offer?.offer_id,
+    "Active offer retrieved matches consultation completion offer"
+  );
+
+  const offeredPatient = localDb.getPatientById(offeredPatientId);
+  const notifications = localDb.getNotificationsForUser(offeredPatient!.user_id);
+  assert(
+    notifications.length > 0 && notifications[0].type === "early_offer",
+    "In-app notification created with doctor name, clinic, and 2-min response window"
+  );
+
+  // TEST 13: Prevent Duplicate Active Offers
+  console.log("\nTEST 13: Prevent Duplicate Active Offers for Same Patient/Slot");
+  let duplicateOfferError = false;
+  try {
+    localDb.createEarlySlotOffer({
+      slotId: activeOffer!.slot_id,
+      doctorId: targetDoctor.doctor_id,
+      patientId: offeredPatientId,
+    });
+  } catch {
+    duplicateOfferError = true;
+  }
+  assert(duplicateOfferError, "Blocked duplicate active offer for the same patient");
+
+  // TEST 14: Patient Declines Offer & Automatic Fallback to Next Patient
+  console.log("\nTEST 14: Offer Decline & Automatic Fallback to Next Patient");
+  // Patient 1 declines offer
+  const declineResult = localDb.declineEarlySlotOffer(
+    activeOffer!.offer_id,
+    offeredPatient!.user_id
+  );
+  assert(declineResult.success, "Patient successfully declined earlier offer");
+
+  const declinedOffer = localDb.getOfferById(activeOffer!.offer_id);
+  assert(declinedOffer?.status === "declined", "Offer marked as 'declined'");
+
+  // Automatic cascade to next patient in queue (patient2 - Anita at 17:00)
+  const cascadedOffer = localDb.getActiveOfferForPatient(patient2.patient_id);
+  assert(
+    cascadedOffer !== null && cascadedOffer.patient_id === patient2.patient_id,
+    "Available slot automatically cascaded to next eligible patient in schedule"
+  );
+
+  // TEST 15: Atomic Offer Acceptance (Reschedule Without Duplicate Booking or Extra Fee)
+  console.log("\nTEST 15: Atomic Offer Acceptance & Safe Rescheduling");
+  const acceptResult = localDb.acceptEarlySlotOfferAtomic(
+    cascadedOffer!.offer_id,
+    userPatient2.user_id
+  );
+  assert(acceptResult.success, "Patient atomically accepted the early slot offer");
+  assert(
+    acceptResult.appointment.appointment_id === appPatient2.appointment_id,
+    "Original appointment ID preserved (no duplicate booking created)"
+  );
+  assert(
+    acceptResult.appointment.availability_id === activeOffer!.slot_id,
+    "Appointment moved safely to earlier slot"
+  );
+
+  // Original later slot is freed back to availability
+  const freedSlot = localDb.getAvailabilityById(laterSlot2.availability_id);
+  assert(
+    freedSlot?.is_available === true,
+    "Patient's previous time slot freed (is_available = true) without double booking"
+  );
+
+  // Concurrent second acceptance on same offer is rejected
+  let secondAcceptError = false;
+  try {
+    localDb.acceptEarlySlotOfferAtomic(cascadedOffer!.offer_id, userPatient2.user_id);
+  } catch {
+    secondAcceptError = true;
+  }
+  assert(secondAcceptError, "Concurrency guard prevented double acceptance on already accepted offer");
+
+  // TEST 16: No Eligible Patients Remaining -> Return to Normal Availability
+  console.log("\nTEST 16: Fallback to Public Availability When No Patients Remain");
+  const farFutureDate = "2099-12-31";
+  const remainingSlot = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    farFutureDate,
+    "18:00",
+    "18:30",
+    30
+  );
+  // Mark slot as temporarily held for offer processing
+  remainingSlot.is_available = false;
+
+  // Advance offer when no eligible patients exist
+  const noCandidateResult = localDb.advanceOfferToNextEligiblePatient(
+    remainingSlot.availability_id,
+    targetDoctor.doctor_id
+  );
+  assert(noCandidateResult === null, "Correctly identifies when no eligible patients remain in queue");
+
+  const restoredRemaining = localDb.getAvailabilityById(remainingSlot.availability_id);
+  assert(
+    restoredRemaining?.is_available === true,
+    "Slot returned to is_available = true for standard public booking"
+  );
+
   console.log("\n=========================================================");
   console.log(`TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED (100%)`);
   console.log("=========================================================\n");

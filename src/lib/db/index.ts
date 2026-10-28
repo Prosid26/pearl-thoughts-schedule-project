@@ -1,7 +1,7 @@
 import { localDb } from "./local-store";
 import { isNeonConfigured, getNeonDb } from "./neon";
 import * as schema from "./schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt, gte, desc, asc, sql } from "drizzle-orm";
 import {
   User,
   Patient,
@@ -10,6 +10,12 @@ import {
   Appointment,
   AppointmentStatus,
   UserRole,
+  WaitingQueueStatus,
+  WaitingQueueEntry,
+  EarlyOfferStatus,
+  EarlySlotOffer,
+  NotificationType,
+  InAppNotification,
 } from "@/types/database";
 
 export const getDatabaseMode = (): "neon" | "local" => {
@@ -791,5 +797,837 @@ export const db = {
       }
     }
     return localDb.getAppointmentById(appointmentId) || null;
+  },
+
+  // =========================================================================
+  // --- WAITING QUEUE (Walk-ins & Clinic Checked-in Patients) ---
+  // =========================================================================
+  addToWaitingQueue: async (params: {
+    doctorId: number;
+    patientId?: number | null;
+    patientName: string;
+    patientPhone: string;
+    notes?: string;
+  }): Promise<WaitingQueueEntry> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const result = await neonDb
+          .insert(schema.waitingQueue)
+          .values({
+            doctor_id: params.doctorId,
+            patient_id: params.patientId || null,
+            patient_name: params.patientName.trim(),
+            patient_phone: params.patientPhone.trim(),
+            status: "waiting",
+            check_in_time: new Date(),
+            notes: params.notes?.trim() || null,
+          })
+          .returning();
+
+        const created = result[0];
+        const hydrated = await db.getWaitingQueueById(created.queue_id);
+        return hydrated!;
+      }
+    }
+    return localDb.addToWaitingQueue(params);
+  },
+
+  getWaitingQueue: async (
+    doctorId?: number,
+    status?: WaitingQueueStatus
+  ): Promise<WaitingQueueEntry[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.waitingQueue.findMany({
+          where: and(
+            doctorId ? eq(schema.waitingQueue.doctor_id, doctorId) : undefined,
+            status ? eq(schema.waitingQueue.status, status) : undefined
+          ),
+          with: {
+            doctor: { with: { user: true } },
+            patient: { with: { user: true } },
+          },
+          orderBy: [asc(schema.waitingQueue.check_in_time)],
+        });
+
+        return rows.map((r) => ({
+          ...r,
+          status: r.status as WaitingQueueStatus,
+          check_in_time: r.check_in_time.toISOString(),
+          created_at: r.created_at.toISOString(),
+          doctor: r.doctor as unknown as Doctor,
+          patient: r.patient as unknown as Patient,
+        }));
+      }
+    }
+    return localDb.getWaitingQueue(doctorId, status);
+  },
+
+  getWaitingQueueById: async (
+    queueId: number
+  ): Promise<WaitingQueueEntry | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.waitingQueue.findMany({
+          where: eq(schema.waitingQueue.queue_id, queueId),
+          with: {
+            doctor: { with: { user: true } },
+            patient: { with: { user: true } },
+          },
+          limit: 1,
+        });
+
+        if (rows.length === 0) return null;
+        const r = rows[0];
+        return {
+          ...r,
+          status: r.status as WaitingQueueStatus,
+          check_in_time: r.check_in_time.toISOString(),
+          created_at: r.created_at.toISOString(),
+          doctor: r.doctor as unknown as Doctor,
+          patient: r.patient as unknown as Patient,
+        };
+      }
+    }
+    return localDb.getWaitingQueueById(queueId) || null;
+  },
+
+  updateWaitingQueueStatus: async (
+    queueId: number,
+    status: WaitingQueueStatus
+  ): Promise<WaitingQueueEntry> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        await neonDb
+          .update(schema.waitingQueue)
+          .set({ status })
+          .where(eq(schema.waitingQueue.queue_id, queueId));
+        return (await db.getWaitingQueueById(queueId))!;
+      }
+    }
+    return localDb.updateWaitingQueueStatus(queueId, status);
+  },
+
+  // =========================================================================
+  // --- IN-APP NOTIFICATIONS ---
+  // =========================================================================
+  createNotification: async (params: {
+    userId: number;
+    title: string;
+    message: string;
+    type: NotificationType;
+    relatedOfferId?: number;
+  }): Promise<InAppNotification> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const result = await neonDb
+          .insert(schema.notifications)
+          .values({
+            user_id: params.userId,
+            title: params.title,
+            message: params.message,
+            type: params.type,
+            related_offer_id: params.relatedOfferId || null,
+            is_read: false,
+          })
+          .returning();
+        const r = result[0];
+        return {
+          ...r,
+          type: r.type as NotificationType,
+          created_at: r.created_at.toISOString(),
+        };
+      }
+    }
+    return localDb.createNotification(params);
+  },
+
+  getNotificationsForUser: async (
+    userId: number
+  ): Promise<InAppNotification[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.notifications.findMany({
+          where: eq(schema.notifications.user_id, userId),
+          with: {
+            offer: {
+              with: {
+                doctor: { with: { user: true } },
+                slot: true,
+              },
+            },
+          },
+          orderBy: [desc(schema.notifications.created_at)],
+        });
+
+        return rows.map((r) => ({
+          ...r,
+          type: r.type as NotificationType,
+          created_at: r.created_at.toISOString(),
+          offer: r.offer as unknown as EarlySlotOffer,
+        }));
+      }
+    }
+    return localDb.getNotificationsForUser(userId);
+  },
+
+  markNotificationRead: async (
+    notificationId: number,
+    userId: number
+  ): Promise<boolean> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        await neonDb
+          .update(schema.notifications)
+          .set({ is_read: true })
+          .where(
+            and(
+              eq(schema.notifications.notification_id, notificationId),
+              eq(schema.notifications.user_id, userId)
+            )
+          );
+        return true;
+      }
+    }
+    return localDb.markNotificationRead(notificationId, userId);
+  },
+
+  // =========================================================================
+  // --- EARLY SLOT OFFERS (Smart Waiting Queue & Fallbacks) ---
+  // =========================================================================
+  createEarlySlotOffer: async (params: {
+    slotId: number;
+    doctorId: number;
+    patientId: number;
+    queueId?: number | null;
+    originalAppointmentId?: number | null;
+    responseWindowMinutes?: number;
+  }): Promise<EarlySlotOffer> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        // Prevent duplicate active offer for the same patient
+        const existing = await neonDb
+          .select()
+          .from(schema.earlySlotOffers)
+          .where(
+            and(
+              eq(schema.earlySlotOffers.patient_id, params.patientId),
+              eq(schema.earlySlotOffers.status, "pending"),
+              gt(schema.earlySlotOffers.expires_at, new Date())
+            )
+          );
+
+        if (existing.length > 0) {
+          throw new Error("Patient already has an active pending offer.");
+        }
+
+        const windowMinutes = params.responseWindowMinutes || 2; // Default 2 minutes
+        const expiresAt = new Date(Date.now() + windowMinutes * 60 * 1000);
+
+        const result = await neonDb
+          .insert(schema.earlySlotOffers)
+          .values({
+            slot_id: params.slotId,
+            doctor_id: params.doctorId,
+            patient_id: params.patientId,
+            queue_id: params.queueId || null,
+            original_appointment_id: params.originalAppointmentId || null,
+            status: "pending",
+            expires_at: expiresAt,
+          })
+          .returning();
+
+        const created = result[0];
+
+        // Send in-app notification to patient
+        const patient = await db.getPatientById(params.patientId);
+        const doctor = await db.getDoctorById(params.doctorId);
+        const slot = await db.getAvailabilityById(params.slotId);
+
+        if (patient?.user_id) {
+          await db.createNotification({
+            userId: patient.user_id,
+            title: "Earlier Appointment Slot Available!",
+            message: `Dr. ${doctor?.user?.full_name || "Doctor"} completed an appointment early! An earlier slot is available on ${slot?.available_date} at ${slot?.start_time}. You have 2 minutes to respond.`,
+            type: "early_offer",
+            relatedOfferId: created.offer_id,
+          });
+        }
+
+        return (await db.getOfferById(created.offer_id))!;
+      }
+    }
+    return localDb.createEarlySlotOffer(params);
+  },
+
+  getActiveOfferForPatient: async (
+    patientId: number
+  ): Promise<EarlySlotOffer | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        // First: find and expire any pending offers that reached countdown expiry
+        const expiredOffers = await neonDb
+          .select()
+          .from(schema.earlySlotOffers)
+          .where(
+            and(
+              eq(schema.earlySlotOffers.patient_id, patientId),
+              eq(schema.earlySlotOffers.status, "pending"),
+              sql`${schema.earlySlotOffers.expires_at} <= NOW()`
+            )
+          );
+
+        for (const exp of expiredOffers) {
+          await neonDb
+            .update(schema.earlySlotOffers)
+            .set({ status: "expired" })
+            .where(eq(schema.earlySlotOffers.offer_id, exp.offer_id));
+
+          // Auto-fallback: offer slot to next eligible patient!
+          await db.advanceOfferToNextEligiblePatient(exp.slot_id, exp.doctor_id);
+        }
+
+        // Return active pending offer if still within window
+        const rows = await neonDb.query.earlySlotOffers.findMany({
+          where: and(
+            eq(schema.earlySlotOffers.patient_id, patientId),
+            eq(schema.earlySlotOffers.status, "pending"),
+            gt(schema.earlySlotOffers.expires_at, new Date())
+          ),
+          with: {
+            slot: true,
+            doctor: { with: { user: true } },
+            patient: { with: { user: true } },
+            originalAppointment: true,
+          },
+          orderBy: [desc(schema.earlySlotOffers.created_at)],
+          limit: 1,
+        });
+
+        if (rows.length === 0) return null;
+        const r = rows[0];
+        return {
+          ...r,
+          status: r.status as EarlyOfferStatus,
+          offered_at: r.offered_at.toISOString(),
+          expires_at: r.expires_at.toISOString(),
+          responded_at: r.responded_at ? r.responded_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+          slot: r.slot as unknown as Availability,
+          doctor: r.doctor as unknown as Doctor,
+          patient: r.patient as unknown as Patient,
+          original_appointment: r.originalAppointment as unknown as Appointment,
+        };
+      }
+    }
+    return localDb.getActiveOfferForPatient(patientId);
+  },
+
+  getOffersForDoctor: async (doctorId: number): Promise<EarlySlotOffer[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.earlySlotOffers.findMany({
+          where: eq(schema.earlySlotOffers.doctor_id, doctorId),
+          with: {
+            slot: true,
+            patient: { with: { user: true } },
+            originalAppointment: true,
+          },
+          orderBy: [desc(schema.earlySlotOffers.created_at)],
+        });
+
+        return rows.map((r) => ({
+          ...r,
+          status: r.status as EarlyOfferStatus,
+          offered_at: r.offered_at.toISOString(),
+          expires_at: r.expires_at.toISOString(),
+          responded_at: r.responded_at ? r.responded_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+          slot: r.slot as unknown as Availability,
+          patient: r.patient as unknown as Patient,
+          original_appointment: r.originalAppointment as unknown as Appointment,
+        }));
+      }
+    }
+    return localDb.getOffersForDoctor(doctorId);
+  },
+
+  getAllOffers: async (): Promise<EarlySlotOffer[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.earlySlotOffers.findMany({
+          with: {
+            slot: true,
+            doctor: { with: { user: true } },
+            patient: { with: { user: true } },
+            originalAppointment: true,
+          },
+          orderBy: [desc(schema.earlySlotOffers.created_at)],
+        });
+
+        return rows.map((r) => ({
+          ...r,
+          status: r.status as EarlyOfferStatus,
+          offered_at: r.offered_at.toISOString(),
+          expires_at: r.expires_at.toISOString(),
+          responded_at: r.responded_at ? r.responded_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+          slot: r.slot as unknown as Availability,
+          doctor: r.doctor as unknown as Doctor,
+          patient: r.patient as unknown as Patient,
+          original_appointment: r.originalAppointment as unknown as Appointment,
+        }));
+      }
+    }
+    return localDb.getAllOffers();
+  },
+
+  getOfferById: async (offerId: number): Promise<EarlySlotOffer | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.earlySlotOffers.findMany({
+          where: eq(schema.earlySlotOffers.offer_id, offerId),
+          with: {
+            slot: true,
+            doctor: { with: { user: true } },
+            patient: { with: { user: true } },
+            originalAppointment: true,
+          },
+          limit: 1,
+        });
+
+        if (rows.length === 0) return null;
+        const r = rows[0];
+        return {
+          ...r,
+          status: r.status as EarlyOfferStatus,
+          offered_at: r.offered_at.toISOString(),
+          expires_at: r.expires_at.toISOString(),
+          responded_at: r.responded_at ? r.responded_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+          slot: r.slot as unknown as Availability,
+          doctor: r.doctor as unknown as Doctor,
+          patient: r.patient as unknown as Patient,
+          original_appointment: r.originalAppointment as unknown as Appointment,
+        };
+      }
+    }
+    return localDb.getOfferById(offerId) || null;
+  },
+
+  /**
+   * Atomic Conditional Acceptance of an Early Slot Offer
+   * Uses SQL atomic update with row condition:
+   * WHERE offer_id = $id AND status = 'pending' AND expires_at > NOW()
+   * Eliminates race conditions and prevents double claim.
+   */
+  acceptEarlySlotOfferAtomic: async (
+    offerId: number,
+    patientUserId: number
+  ): Promise<{ success: boolean; appointment: Appointment; offer: EarlySlotOffer }> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        // Atomic conditional claim
+        const updated = await neonDb
+          .update(schema.earlySlotOffers)
+          .set({
+            status: "accepted",
+            responded_at: new Date(),
+          })
+          .where(
+            and(
+              eq(schema.earlySlotOffers.offer_id, offerId),
+              eq(schema.earlySlotOffers.status, "pending"),
+              gt(schema.earlySlotOffers.expires_at, new Date())
+            )
+          )
+          .returning();
+
+        if (updated.length === 0) {
+          // Check if it was expired or already claimed
+          const current = await db.getOfferById(offerId);
+          if (!current) throw new Error("Offer not found.");
+          if (current.status === "pending" && new Date(current.expires_at) <= new Date()) {
+            await neonDb
+              .update(schema.earlySlotOffers)
+              .set({ status: "expired" })
+              .where(eq(schema.earlySlotOffers.offer_id, offerId));
+            await db.advanceOfferToNextEligiblePatient(current.slot_id, current.doctor_id);
+            throw new Error("This offer has expired. The slot was offered to the next patient.");
+          }
+          throw new Error(`Offer is no longer available (current status: ${current.status}).`);
+        }
+
+        const offer = updated[0];
+
+        // Patient authorization check
+        const patient = await db.getPatientById(offer.patient_id);
+        if (!patient || patient.user_id !== patientUserId) {
+          throw new Error("Unauthorized to accept this offer.");
+        }
+
+        const newSlot = await db.getAvailabilityById(offer.slot_id);
+        if (!newSlot) {
+          throw new Error("Target availability slot does not exist.");
+        }
+
+        let finalAppointment: Appointment;
+
+        if (offer.original_appointment_id) {
+          // Scheduled patient reschedule: update appointment safely without double charge or duplicate
+          const originalApp = await db.getAppointmentById(offer.original_appointment_id);
+          if (!originalApp) throw new Error("Original appointment not found.");
+
+          // Free old slot
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: true })
+            .where(eq(schema.availability.availability_id, originalApp.availability_id));
+
+          // Claim new slot
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: false })
+            .where(eq(schema.availability.availability_id, offer.slot_id));
+
+          const appointmentDate = new Date(`${newSlot.available_date}T${newSlot.start_time}:00Z`);
+
+          // Update appointment in place
+          await neonDb
+            .update(schema.appointments)
+            .set({
+              availability_id: offer.slot_id,
+              appointment_date: appointmentDate,
+              status: "confirmed",
+            })
+            .where(eq(schema.appointments.appointment_id, offer.original_appointment_id));
+
+          finalAppointment = (await db.getAppointmentById(offer.original_appointment_id))!;
+        } else if (offer.queue_id) {
+          // Walk-in queue patient
+          await neonDb
+            .update(schema.waitingQueue)
+            .set({ status: "in_consultation" })
+            .where(eq(schema.waitingQueue.queue_id, offer.queue_id));
+
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: false })
+            .where(eq(schema.availability.availability_id, offer.slot_id));
+
+          const appointmentDate = new Date(`${newSlot.available_date}T${newSlot.start_time}:00Z`);
+
+          const createdApp = await neonDb
+            .insert(schema.appointments)
+            .values({
+              patient_id: offer.patient_id,
+              doctor_id: offer.doctor_id,
+              availability_id: offer.slot_id,
+              appointment_date: appointmentDate,
+              status: "confirmed",
+              reason: "Early Waiting Queue Consultation",
+            })
+            .returning();
+
+          finalAppointment = (await db.getAppointmentById(createdApp[0].appointment_id))!;
+        } else {
+          // General direct patient acceptance
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: false })
+            .where(eq(schema.availability.availability_id, offer.slot_id));
+
+          const appointmentDate = new Date(`${newSlot.available_date}T${newSlot.start_time}:00Z`);
+
+          const createdApp = await neonDb
+            .insert(schema.appointments)
+            .values({
+              patient_id: offer.patient_id,
+              doctor_id: offer.doctor_id,
+              availability_id: offer.slot_id,
+              appointment_date: appointmentDate,
+              status: "confirmed",
+              reason: "Early Slot Fast-Track Offer Accepted",
+            })
+            .returning();
+
+          finalAppointment = (await db.getAppointmentById(createdApp[0].appointment_id))!;
+        }
+
+        // Send confirmation notification
+        await db.createNotification({
+          userId: patient.user_id,
+          title: "Earlier Slot Confirmed!",
+          message: `Your appointment has been successfully rescheduled to ${newSlot.available_date} at ${newSlot.start_time}.`,
+          type: "offer_accepted",
+          relatedOfferId: offer.offer_id,
+        });
+
+        const refreshedOffer = (await db.getOfferById(offer.offer_id))!;
+        return {
+          success: true,
+          appointment: finalAppointment,
+          offer: refreshedOffer,
+        };
+      }
+    }
+    return localDb.acceptEarlySlotOfferAtomic(offerId, patientUserId);
+  },
+
+  declineEarlySlotOffer: async (
+    offerId: number,
+    patientUserId: number
+  ): Promise<{ success: boolean }> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const offer = await db.getOfferById(offerId);
+        if (!offer) throw new Error("Offer not found.");
+
+        const patient = await db.getPatientById(offer.patient_id);
+        if (!patient || patient.user_id !== patientUserId) {
+          throw new Error("Unauthorized to decline this offer.");
+        }
+
+        if (offer.status === "pending") {
+          await neonDb
+            .update(schema.earlySlotOffers)
+            .set({
+              status: "declined",
+              responded_at: new Date(),
+            })
+            .where(eq(schema.earlySlotOffers.offer_id, offerId));
+
+          // Automatically cascade offer to next eligible patient!
+          await db.advanceOfferToNextEligiblePatient(offer.slot_id, offer.doctor_id);
+        }
+
+        return { success: true };
+      }
+    }
+    return localDb.declineEarlySlotOffer(offerId, patientUserId);
+  },
+
+  findNextEligiblePatientForSlot: async (
+    slotId: number,
+    doctorId: number
+  ): Promise<{
+    patientId: number;
+    queueId?: number | null;
+    originalAppointmentId?: number | null;
+  } | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const slot = await db.getAvailabilityById(slotId);
+        if (!slot) return null;
+        const slotDateTime = new Date(`${slot.available_date}T${slot.start_time}:00Z`);
+
+        // 1. Priority: Patients waiting at clinic in waiting_queue
+        const queueEntries = await neonDb.query.waitingQueue.findMany({
+          where: and(
+            eq(schema.waitingQueue.doctor_id, doctorId),
+            eq(schema.waitingQueue.status, "waiting")
+          ),
+          orderBy: [asc(schema.waitingQueue.check_in_time)],
+        });
+
+        for (const q of queueEntries) {
+          if (!q.patient_id) continue;
+          // Check if this patient already received an offer for this slot
+          const existing = await neonDb
+            .select()
+            .from(schema.earlySlotOffers)
+            .where(
+              and(
+                eq(schema.earlySlotOffers.slot_id, slotId),
+                eq(schema.earlySlotOffers.patient_id, q.patient_id)
+              )
+            );
+          if (existing.length === 0) {
+            return {
+              patientId: q.patient_id,
+              queueId: q.queue_id,
+            };
+          }
+        }
+
+        // 2. Priority: Next scheduled patient for that doctor
+        const scheduled = await neonDb.query.appointments.findMany({
+          where: and(
+            eq(schema.appointments.doctor_id, doctorId),
+            gt(schema.appointments.appointment_date, slotDateTime)
+          ),
+          orderBy: [asc(schema.appointments.appointment_date)],
+        });
+
+        for (const app of scheduled) {
+          if (app.status !== "confirmed" && app.status !== "pending") continue;
+
+          // Check if patient already received offer for this slot
+          const slotOffer = await neonDb
+            .select()
+            .from(schema.earlySlotOffers)
+            .where(
+              and(
+                eq(schema.earlySlotOffers.slot_id, slotId),
+                eq(schema.earlySlotOffers.patient_id, app.patient_id)
+              )
+            );
+          if (slotOffer.length > 0) continue;
+
+          // Check if patient has any other active pending offer
+          const activeOffer = await neonDb
+            .select()
+            .from(schema.earlySlotOffers)
+            .where(
+              and(
+                eq(schema.earlySlotOffers.patient_id, app.patient_id),
+                eq(schema.earlySlotOffers.status, "pending"),
+                gt(schema.earlySlotOffers.expires_at, new Date())
+              )
+            );
+          if (activeOffer.length > 0) continue;
+
+          return {
+            patientId: app.patient_id,
+            originalAppointmentId: app.appointment_id,
+          };
+        }
+
+        return null;
+      }
+    }
+    return localDb.findNextEligiblePatientForSlot(slotId, doctorId);
+  },
+
+  advanceOfferToNextEligiblePatient: async (
+    slotId: number,
+    doctorId: number
+  ): Promise<EarlySlotOffer | null> => {
+    const candidate = await db.findNextEligiblePatientForSlot(slotId, doctorId);
+    if (candidate) {
+      return await db.createEarlySlotOffer({
+        slotId,
+        doctorId,
+        patientId: candidate.patientId,
+        queueId: candidate.queueId,
+        originalAppointmentId: candidate.originalAppointmentId,
+        responseWindowMinutes: 2,
+      });
+    } else {
+      // No eligible candidates remain: restore slot for normal booking
+      if (isNeonConfigured) {
+        const neonDb = getNeonDb();
+        if (neonDb) {
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: true })
+            .where(eq(schema.availability.availability_id, slotId));
+        }
+      } else {
+        const slot = localDb.getAvailabilityById(slotId);
+        if (slot) slot.is_available = true;
+      }
+      return null;
+    }
+  },
+
+  completeConsultationAndCheckEarlyOffer: async (
+    appointmentId: number,
+    doctorUserId: number
+  ): Promise<{
+    appointment: Appointment;
+    earlySlotOffered: boolean;
+    offer?: EarlySlotOffer;
+    message: string;
+  }> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const app = await db.getAppointmentById(appointmentId);
+        if (!app) throw new Error("Appointment not found");
+
+        const doctor = await db.getDoctorById(app.doctor_id);
+        if (!doctor || doctor.user_id !== doctorUserId) {
+          throw new Error("Unauthorized: Only the attending doctor can complete this appointment.");
+        }
+
+        // Complete appointment
+        await neonDb
+          .update(schema.appointments)
+          .set({ status: "completed" })
+          .where(eq(schema.appointments.appointment_id, appointmentId));
+
+        const appDateStr = (
+          typeof app.appointment_date === "string"
+            ? app.appointment_date
+            : (app.appointment_date as any).toISOString()
+        ).split("T")[0];
+
+        // Detect available slots for this doctor on or after consultation date
+        const availSlots = await neonDb
+          .select()
+          .from(schema.availability)
+          .where(
+            and(
+              eq(schema.availability.doctor_id, doctor.doctor_id),
+              eq(schema.availability.is_available, true),
+              gte(schema.availability.available_date, appDateStr)
+            )
+          )
+          .orderBy(
+            asc(schema.availability.available_date),
+            asc(schema.availability.start_time)
+          );
+
+        let createdOffer: EarlySlotOffer | null = null;
+        if (availSlots.length > 0) {
+          const targetSlot = availSlots[0];
+          // Check if this slot already has an active pending offer
+          const activeOffer = await neonDb
+            .select()
+            .from(schema.earlySlotOffers)
+            .where(
+              and(
+                eq(schema.earlySlotOffers.slot_id, targetSlot.availability_id),
+                eq(schema.earlySlotOffers.status, "pending"),
+                gt(schema.earlySlotOffers.expires_at, new Date())
+              )
+            );
+
+          if (activeOffer.length === 0) {
+            createdOffer = await db.advanceOfferToNextEligiblePatient(
+              targetSlot.availability_id,
+              doctor.doctor_id
+            );
+          }
+        }
+
+        const updatedApp = (await db.getAppointmentById(appointmentId))!;
+        return {
+          appointment: updatedApp,
+          earlySlotOffered: Boolean(createdOffer),
+          offer: createdOffer || undefined,
+          message: createdOffer
+            ? "Consultation completed. An earlier slot was detected and offered to the next eligible patient!"
+            : "Consultation marked as completed successfully.",
+        };
+      }
+    }
+    return localDb.completeConsultationAndCheckEarlyOffer(appointmentId, doctorUserId);
   },
 };

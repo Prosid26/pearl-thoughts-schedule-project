@@ -134,6 +134,14 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                       Manage Slots
                     </Link>
                   </>
+                ) : session.role === "admin" ? (
+                  <Link
+                    href="/reception/dashboard"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-xs"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    Reception Queue
+                  </Link>
                 ) : (
                   <>
                     <Link
@@ -246,6 +254,14 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                       Manage Availability Slots
                     </Link>
                   </>
+                ) : session.role === "admin" ? (
+                  <Link
+                    href="/reception/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 text-sm font-semibold text-teal-700 rounded-lg bg-teal-50"
+                  >
+                    Reception Queue
+                  </Link>
                 ) : (
                   <>
                     <Link
