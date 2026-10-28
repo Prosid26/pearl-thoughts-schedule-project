@@ -299,6 +299,7 @@ export const db = {
           const { doctor, user } = result[0];
           return {
             ...doctor,
+            scheduling_mode: (doctor.scheduling_mode || "stream") as "stream" | "wave",
             consultation_fee: parseFloat(doctor.consultation_fee),
             created_at: doctor.created_at.toISOString(),
             user,
@@ -338,6 +339,7 @@ export const db = {
           const { doctor, user } = result[0];
           return {
             ...doctor,
+            scheduling_mode: (doctor.scheduling_mode || "stream") as "stream" | "wave",
             consultation_fee: parseFloat(doctor.consultation_fee),
             created_at: doctor.created_at.toISOString(),
             user,
@@ -381,6 +383,7 @@ export const db = {
           const rows = await query;
           baseList = rows.map(({ doctor, user }) => ({
             ...doctor,
+            scheduling_mode: (doctor.scheduling_mode || "stream") as "stream" | "wave",
             consultation_fee: parseFloat(doctor.consultation_fee),
             created_at: doctor.created_at.toISOString(),
             user,
@@ -451,6 +454,7 @@ export const db = {
         invalidateDoctorsCache();
         return {
           ...d,
+          scheduling_mode: (d.scheduling_mode || "stream") as "stream" | "wave",
           consultation_fee: parseFloat(d.consultation_fee),
           created_at: d.created_at.toISOString(),
         };
@@ -479,6 +483,9 @@ export const db = {
       consultation_fee?: number;
       bio?: string;
       clinic_address?: string;
+      scheduling_mode?: "stream" | "wave";
+      wave_capacity?: number;
+      wave_interval_minutes?: number;
     }
   ): Promise<Doctor> => {
     invalidateDoctorsCache();
@@ -502,6 +509,15 @@ export const db = {
             ...(data.bio !== undefined && { bio: data.bio }),
             ...(data.clinic_address !== undefined && {
               clinic_address: data.clinic_address,
+            }),
+            ...(data.scheduling_mode !== undefined && {
+              scheduling_mode: data.scheduling_mode,
+            }),
+            ...(data.wave_capacity !== undefined && {
+              wave_capacity: data.wave_capacity,
+            }),
+            ...(data.wave_interval_minutes !== undefined && {
+              wave_interval_minutes: data.wave_interval_minutes,
             }),
           })
           .where(eq(schema.doctors.doctor_id, doctorId));
@@ -577,11 +593,19 @@ export const db = {
     availableDate: string,
     startTime: string,
     endTime: string,
-    slotDuration: number = 30
+    slotDuration: number = 30,
+    isWave?: boolean,
+    waveCapacity?: number
   ): Promise<Availability> => {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
+        const doctor = await db.getDoctorById(doctorId);
+        const resolvedIsWave = isWave !== undefined ? isWave : doctor?.scheduling_mode === "wave";
+        const resolvedWaveCapacity = resolvedIsWave
+          ? (waveCapacity && waveCapacity > 0 ? waveCapacity : doctor?.wave_capacity || 3)
+          : 1;
+
         const result = await neonDb
           .insert(schema.availability)
           .values({
@@ -591,6 +615,9 @@ export const db = {
             end_time: endTime,
             slot_duration: slotDuration,
             is_available: true,
+            is_wave: resolvedIsWave,
+            wave_capacity: resolvedWaveCapacity,
+            wave_booked_count: 0,
           })
           .returning();
         const r = result[0];
@@ -605,7 +632,9 @@ export const db = {
       availableDate,
       startTime,
       endTime,
-      slotDuration
+      slotDuration,
+      isWave,
+      waveCapacity
     );
   },
 
@@ -654,22 +683,51 @@ export const db = {
         if (slot.doctor_id !== params.doctorId) {
           throw new Error("Slot does not belong to the selected doctor.");
         }
-        if (!slot.is_available) {
-          throw new Error(
-            "This time slot has already been booked by another patient. Please choose an alternative slot."
-          );
-        }
 
-        // Atomically mark slot unavailable
-        await neonDb
-          .update(schema.availability)
-          .set({ is_available: false })
-          .where(
-            and(
-              eq(schema.availability.availability_id, params.availabilityId),
-              eq(schema.availability.is_available, true)
-            )
-          );
+        let waveNum: number | null = null;
+        let estConsult: string | null = null;
+
+        if (slot.is_wave) {
+          const cap = slot.wave_capacity || 3;
+          const currentBooked = slot.wave_booked_count || 0;
+          if (currentBooked >= cap || !slot.is_available) {
+            throw new Error(
+              "This wave arrival window has reached its maximum capacity. Please choose another wave or slot."
+            );
+          }
+          const nextCount = currentBooked + 1;
+          waveNum = nextCount;
+          const [sh, sm] = slot.start_time.split(":").map(Number);
+          const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
+          const eh = Math.floor(totalMinutes / 60) % 24;
+          const em = totalMinutes % 60;
+          estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+
+          await neonDb
+            .update(schema.availability)
+            .set({
+              wave_booked_count: nextCount,
+              ...(nextCount >= cap ? { is_available: false } : {}),
+            })
+            .where(eq(schema.availability.availability_id, params.availabilityId));
+        } else {
+          if (!slot.is_available) {
+            throw new Error(
+              "This time slot has already been booked by another patient. Please choose an alternative slot."
+            );
+          }
+
+          // Atomically mark slot unavailable
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: false })
+            .where(
+              and(
+                eq(schema.availability.availability_id, params.availabilityId),
+                eq(schema.availability.is_available, true)
+              )
+            );
+        }
 
         const appointmentDate = new Date(
           `${slot.available_date}T${slot.start_time}:00Z`
@@ -684,6 +742,8 @@ export const db = {
             appointment_date: appointmentDate,
             status: "pending",
             reason: params.reason,
+            wave_number: waveNum,
+            estimated_consult_time: estConsult,
           })
           .returning();
 
@@ -692,6 +752,119 @@ export const db = {
       }
     }
     return localDb.bookAppointmentAtomic(params);
+  },
+
+  // --- Atomic Rescheduling ---
+  rescheduleAppointmentAtomic: async (params: {
+    appointmentId: number;
+    newAvailabilityId: number;
+    reason?: string;
+    requesterUserId: number;
+    requesterRole: UserRole;
+  }): Promise<Appointment> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const app = await db.getAppointmentById(params.appointmentId);
+        if (!app) throw new Error("Appointment record not found.");
+
+        const doctor = await db.getDoctorById(app.doctor_id);
+        const patient = await db.getPatientById(app.patient_id);
+        if (!doctor || !patient) throw new Error("Practitioner or patient not found.");
+
+        if (params.requesterRole === "patient" && patient.user_id !== params.requesterUserId) {
+          throw new Error("Unauthorized");
+        }
+        if (params.requesterRole === "doctor" && doctor.user_id !== params.requesterUserId) {
+          throw new Error("Unauthorized");
+        }
+
+        if (app.status !== "pending" && app.status !== "confirmed") {
+          throw new Error(`Cannot reschedule an appointment in '${app.status}' status.`);
+        }
+
+        const newSlot = await db.getAvailabilityById(params.newAvailabilityId);
+        if (!newSlot) throw new Error("Target availability slot does not exist.");
+        if (newSlot.doctor_id !== app.doctor_id) {
+          throw new Error("Rescheduling is only supported with the same practitioner.");
+        }
+
+        // Release old slot
+        const oldSlot = await db.getAvailabilityById(app.availability_id);
+        if (oldSlot) {
+          if (oldSlot.is_wave) {
+            const nextOldBooked = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
+            await neonDb
+              .update(schema.availability)
+              .set({ wave_booked_count: nextOldBooked, is_available: true })
+              .where(eq(schema.availability.availability_id, oldSlot.availability_id));
+          } else {
+            await neonDb
+              .update(schema.availability)
+              .set({ is_available: true })
+              .where(eq(schema.availability.availability_id, oldSlot.availability_id));
+          }
+        }
+
+        // Secure new slot
+        let waveNum: number | null = null;
+        let estConsult: string | null = null;
+
+        if (newSlot.is_wave) {
+          const cap = newSlot.wave_capacity || 3;
+          const currentNewBooked = newSlot.wave_booked_count || 0;
+          if (currentNewBooked >= cap || !newSlot.is_available) {
+            throw new Error("Wave window at full capacity.");
+          }
+          const nextCount = currentNewBooked + 1;
+          waveNum = nextCount;
+          const [sh, sm] = newSlot.start_time.split(":").map(Number);
+          const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
+          const eh = Math.floor(totalMinutes / 60) % 24;
+          const em = totalMinutes % 60;
+          estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+
+          await neonDb
+            .update(schema.availability)
+            .set({
+              wave_booked_count: nextCount,
+              ...(nextCount >= cap ? { is_available: false } : {}),
+            })
+            .where(eq(schema.availability.availability_id, newSlot.availability_id));
+        } else {
+          if (!newSlot.is_available) {
+            throw new Error("Requested time slot is already booked.");
+          }
+          await neonDb
+            .update(schema.availability)
+            .set({ is_available: false })
+            .where(eq(schema.availability.availability_id, newSlot.availability_id));
+        }
+
+        const newDate = new Date(`${newSlot.available_date}T${newSlot.start_time}:00Z`);
+        await neonDb
+          .update(schema.appointments)
+          .set({
+            availability_id: params.newAvailabilityId,
+            appointment_date: newDate,
+            rescheduled_from_id: app.availability_id,
+            wave_number: waveNum,
+            estimated_consult_time: estConsult,
+            ...(params.reason ? { reason: `${app.reason} (Rescheduled: ${params.reason.trim()})` } : {}),
+          })
+          .where(eq(schema.appointments.appointment_id, params.appointmentId));
+
+        await db.createNotification({
+          userId: patient.user_id,
+          title: "Appointment Rescheduled",
+          message: `Your consultation with ${doctor.user?.full_name || "Dr. " + doctor.specialization} has been rescheduled to ${newSlot.available_date} at ${newSlot.start_time} IST.`,
+          type: "rescheduled",
+        });
+
+        return (await db.getAppointmentById(params.appointmentId))!;
+      }
+    }
+    return localDb.rescheduleAppointmentAtomic(params);
   },
 
   // --- Status & Appointments ---
@@ -726,12 +899,21 @@ export const db = {
           .where(eq(schema.appointments.appointment_id, params.appointmentId));
 
         if (params.newStatus === "cancelled" || params.newStatus === "rejected") {
-          await neonDb
-            .update(schema.availability)
-            .set({ is_available: true })
-            .where(
-              eq(schema.availability.availability_id, app.availability_id)
-            );
+          const slot = await db.getAvailabilityById(app.availability_id);
+          if (slot) {
+            if (slot.is_wave) {
+              const nextBooked = Math.max(0, (slot.wave_booked_count || 1) - 1);
+              await neonDb
+                .update(schema.availability)
+                .set({ wave_booked_count: nextBooked, is_available: true })
+                .where(eq(schema.availability.availability_id, slot.availability_id));
+            } else {
+              await neonDb
+                .update(schema.availability)
+                .set({ is_available: true })
+                .where(eq(schema.availability.availability_id, slot.availability_id));
+            }
+          }
         }
 
         return (await db.getAppointmentById(params.appointmentId))!;

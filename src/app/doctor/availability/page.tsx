@@ -14,6 +14,7 @@ export default async function DoctorAvailabilityPage() {
     redirect("/patient/dashboard");
   }
 
+  const doctor = await db.getDoctorById(session.doctor_id);
   const availabilities = await db.getDoctorAvailability(session.doctor_id);
 
   return (
@@ -31,7 +32,7 @@ export default async function DoctorAvailabilityPage() {
         </p>
       </div>
 
-      <DoctorAvailabilityManager initialAvailabilities={availabilities} />
+      <DoctorAvailabilityManager initialAvailabilities={availabilities} doctor={doctor} />
     </div>
   );
 }

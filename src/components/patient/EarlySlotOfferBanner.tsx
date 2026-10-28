@@ -134,33 +134,33 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
       )}
 
       {offer && (
-        <div className="relative overflow-hidden rounded-xl bg-forest border-2 border-terracotta p-6 sm:p-7 text-ivory shadow-lg animate-in fade-in slide-in-from-top-3">
+        <div className="relative overflow-hidden rounded-2xl bg-forest border border-terracotta/40 p-5 sm:p-6 text-ivory shadow-sm animate-in fade-in slide-in-from-top-2">
           {/* Top Badge & Countdown Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-forest-light">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-forest-light/60">
             <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold bg-terracotta text-ink tracking-wider uppercase">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-terracotta text-ink tracking-wider uppercase">
                 <Sparkles className="w-3.5 h-3.5 text-forest" />
-                <span>Expedited Slot Opportunity</span>
+                <span>Expedited Slot Available</span>
               </span>
               <span className="text-xs text-sage font-medium hidden sm:inline">
-                A prior consultation finished ahead of schedule
+                A prior consultation completed ahead of schedule
               </span>
             </div>
 
             {/* Countdown Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-[#182821] border border-terracotta/40 text-terracotta text-xs font-mono font-bold self-start sm:self-auto">
-              <Clock className="w-4 h-4 text-terracotta animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#182821] border border-terracotta/40 text-terracotta text-xs font-mono font-bold self-start sm:self-auto">
+              <Clock className="w-3.5 h-3.5 text-terracotta animate-pulse" />
               <span>Response Window: {formatCountdown(secondsRemaining)}</span>
             </div>
           </div>
 
           {/* Core Opportunity Details */}
-          <div className="py-5 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            <div className="md:col-span-8 space-y-2">
-              <div className="text-xs text-sage font-semibold uppercase tracking-wider">
+          <div className="py-4 grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+            <div className="md:col-span-8 space-y-1.5">
+              <div className="text-[11px] text-sage font-semibold uppercase tracking-wider">
                 Physician Availability
               </div>
-              <h3 className="font-serif text-2xl font-bold text-white leading-tight">
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-white leading-tight">
                 {offer.doctor?.user?.full_name || "Doctor"}
               </h3>
               <p className="text-xs text-[#BAC8BF]">
@@ -168,34 +168,34 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
               </p>
 
               {offer.doctor?.clinic_address && (
-                <div className="flex items-center gap-1.5 text-xs text-[#BAC8BF] pt-1">
+                <div className="flex items-center gap-1.5 text-xs text-[#BAC8BF] pt-0.5">
                   <MapPin className="w-3.5 h-3.5 text-sage shrink-0" />
                   <span>{offer.doctor.clinic_address}</span>
                 </div>
               )}
 
               {/* Time Shift Comparison */}
-              <div className="pt-3 flex flex-wrap items-center gap-3 text-xs">
+              <div className="pt-2 flex flex-wrap items-center gap-2.5 text-xs">
                 {offer.original_appointment && (
-                  <div className="px-3 py-1.5 rounded-md bg-[#1D3128] border border-warm-border/20 text-[#8EA094] line-through">
-                    Original: {new Date(offer.original_appointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div className="px-3 py-1 rounded-md bg-[#1D3128] border border-warm-border/20 text-[#8EA094] line-through text-[11px]">
+                    Original: {new Date(offer.original_appointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
                   </div>
                 )}
-                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-[#182821] border border-terracotta/60 text-white font-semibold">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#182821] border border-terracotta/50 text-white font-medium text-xs">
                   <Calendar className="w-3.5 h-3.5 text-terracotta" />
                   <span>
-                    New Slot: {offer.slot?.available_date} @ {formatTime12h(offer.slot?.start_time || "")}
+                    New Slot: {offer.slot?.available_date} @ {formatTime12h(offer.slot?.start_time || "")} IST
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Accept / Decline Action Group */}
-            <div className="md:col-span-4 flex flex-col gap-2.5">
+            <div className="md:col-span-4 flex flex-col gap-2">
               <button
                 disabled={loadingAction !== null}
                 onClick={handleAccept}
-                className="btn-terracotta w-full py-3 text-xs font-bold shadow-sm flex items-center justify-center gap-2"
+                className="btn-terracotta w-full py-2.5 text-xs font-bold shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 {loadingAction === "accept" ? (
                   <>
@@ -213,7 +213,7 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
               <button
                 disabled={loadingAction !== null}
                 onClick={handleDecline}
-                className="w-full py-2.5 px-3 rounded-md text-xs font-medium text-ivory hover:text-white bg-[#1D3128] hover:bg-[#253D32] border border-warm-border/30 transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2 px-3 rounded-xl text-xs font-medium text-ivory/80 hover:text-white bg-[#1D3128] hover:bg-[#253D32] border border-warm-border/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {loadingAction === "decline" ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -225,9 +225,9 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
           </div>
 
           {/* Footer Note */}
-          <div className="pt-3 border-t border-forest-light text-[11px] text-[#BAC8BF] flex items-center justify-between">
+          <div className="pt-3 border-t border-forest-light/60 text-[11px] text-[#BAC8BF] flex items-center justify-between">
             <span>
-              Your original appointment remains 100% reserved unless you accept. No extra fees apply.
+              Your original appointment remains secured unless you accept. No extra fees.
             </span>
             <span className="font-semibold text-terracotta text-[10px] uppercase tracking-wider">
               Atomic Booking Guarantee

@@ -89,28 +89,19 @@ export default async function DoctorDashboardPage() {
         </div>
       </div>
 
-      {/* Metrics Row */}
+      {/* Actionable Practice Focus Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="clinic-card p-5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-            Total Visits on Record
-          </div>
-          <div className="font-serif text-2xl font-bold text-ink mt-1">
-            {appointments.length}
-          </div>
-        </div>
-
-        <div className="clinic-card p-5 border-l-4 border-l-terracotta-dark">
+        <div className={`clinic-card p-4 sm:p-5 ${pendingAppointments.length > 0 ? "border-l-4 border-l-terracotta" : ""}`}>
           <div className="text-[11px] font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 text-terracotta-dark" />
-            Action Required
+            <AlertCircle className={`w-3.5 h-3.5 ${pendingAppointments.length > 0 ? "text-terracotta" : "text-ink-muted"}`} />
+            <span>Pending Review</span>
           </div>
           <div className="font-serif text-2xl font-bold text-ink mt-1">
             {pendingAppointments.length}
           </div>
         </div>
 
-        <div className="clinic-card p-5 border-l-4 border-l-forest">
+        <div className="clinic-card p-4 sm:p-5 border-l-4 border-l-forest">
           <div className="text-[11px] font-bold uppercase tracking-wider text-forest">
             Confirmed Active
           </div>
@@ -119,12 +110,23 @@ export default async function DoctorDashboardPage() {
           </div>
         </div>
 
-        <div className="clinic-card p-5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-            Completed Visits
+        <div className="clinic-card p-4 sm:p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-forest" />
+            <span>Queue Waiting</span>
           </div>
           <div className="font-serif text-2xl font-bold text-ink mt-1">
-            {completedAppointments.length}
+            {waitingQueue.length}
+          </div>
+        </div>
+
+        <div className="clinic-card p-4 sm:p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-terracotta" />
+            <span>Active Offers</span>
+          </div>
+          <div className="font-serif text-2xl font-bold text-ink mt-1">
+            {activeOffers.length}
           </div>
         </div>
       </div>

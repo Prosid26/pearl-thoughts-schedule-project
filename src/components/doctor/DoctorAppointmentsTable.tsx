@@ -11,6 +11,7 @@ import {
   Clock,
 } from "lucide-react";
 import { formatISTDate } from "@/lib/utils/date";
+import { RescheduleModal } from "@/components/appointments/RescheduleModal";
 
 interface Props {
   initialAppointments: Appointment[];
@@ -23,6 +24,8 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
     "all" | "pending" | "confirmed" | "completed" | "cancelled"
   >("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [reschedulingAppointment, setReschedulingAppointment] =
+    useState<Appointment | null>(null);
 
   const handleStatusChange = (
     appointmentId: number,
@@ -179,8 +182,18 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <AppointmentStatusBadge status={app.status} size="sm" />
+                    {(app.status === "pending" || app.status === "confirmed") && (
+                      <button
+                        type="button"
+                        onClick={() => setReschedulingAppointment(app)}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-forest hover:bg-forest/10 border border-forest/30 transition-colors"
+                        title="Reschedule appointment for patient"
+                      >
+                        Reschedule
+                      </button>
+                    )}
                     <DoctorAppointmentActions
                       appointment={app}
                       onStatusUpdated={(newStatus) =>
@@ -191,12 +204,20 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-warm-border-subtle text-xs">
-                  <div className="flex items-center gap-2 text-ink font-semibold">
-                    <Calendar className="w-3.5 h-3.5 text-forest shrink-0" />
-                    <span>
-                      {dateStr} @ {app.availability?.start_time.slice(0, 5)} –{" "}
-                      {app.availability?.end_time.slice(0, 5)} IST
-                    </span>
+                  <div className="flex items-center gap-2 text-ink font-semibold flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-forest shrink-0" />
+                      <span>
+                        {dateStr} @ {app.availability?.start_time.slice(0, 5)} –{" "}
+                        {app.availability?.end_time.slice(0, 5)} IST
+                      </span>
+                    </div>
+
+                    {app.wave_number && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-sage/50 text-forest font-bold">
+                        Wave #{app.wave_number} • Est. {app.estimated_consult_time || "TBD"}
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-ink-muted truncate font-sans">
@@ -217,6 +238,18 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
             There are no appointments matching the selected filter criteria.
           </p>
         </div>
+      )}
+
+      {reschedulingAppointment && (
+        <RescheduleModal
+          appointment={reschedulingAppointment}
+          isOpen={Boolean(reschedulingAppointment)}
+          onClose={() => setReschedulingAppointment(null)}
+          onSuccess={() => {
+            setReschedulingAppointment(null);
+            window.location.reload();
+          }}
+        />
       )}
     </div>
   );

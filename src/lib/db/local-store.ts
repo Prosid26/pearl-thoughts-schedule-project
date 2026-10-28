@@ -867,6 +867,9 @@ class LocalDatabase {
       consultation_fee?: number;
       bio?: string;
       clinic_address?: string;
+      scheduling_mode?: "stream" | "wave";
+      wave_capacity?: number;
+      wave_interval_minutes?: number;
     }
   ): Doctor {
     const doctorIndex = this.state.doctors.findIndex(
@@ -886,6 +889,12 @@ class LocalDatabase {
     if (data.bio !== undefined) doctor.bio = data.bio;
     if (data.clinic_address !== undefined)
       doctor.clinic_address = data.clinic_address;
+    if (data.scheduling_mode !== undefined)
+      doctor.scheduling_mode = data.scheduling_mode;
+    if (data.wave_capacity !== undefined)
+      doctor.wave_capacity = data.wave_capacity;
+    if (data.wave_interval_minutes !== undefined)
+      doctor.wave_interval_minutes = data.wave_interval_minutes;
 
     if (data.full_name) {
       const user = this.state.users.find((u) => u.user_id === doctor.user_id);
@@ -925,7 +934,9 @@ class LocalDatabase {
     availableDate: string,
     startTime: string,
     endTime: string,
-    slotDuration: number = 30
+    slotDuration: number = 30,
+    isWave?: boolean,
+    waveCapacity?: number
   ): Availability {
     // Check doctor exists
     const doctor = this.getDoctorById(doctorId);
@@ -950,6 +961,11 @@ class LocalDatabase {
       );
     }
 
+    const resolvedIsWave = isWave !== undefined ? isWave : doctor.scheduling_mode === "wave";
+    const resolvedWaveCapacity = resolvedIsWave
+      ? (waveCapacity && waveCapacity > 0 ? waveCapacity : doctor.wave_capacity || 3)
+      : 1;
+
     this.state.counters.availabilityId += 1;
     const newSlot: Availability = {
       availability_id: this.state.counters.availabilityId,
@@ -959,6 +975,9 @@ class LocalDatabase {
       end_time: endTime,
       slot_duration: slotDuration,
       is_available: true,
+      is_wave: resolvedIsWave,
+      wave_capacity: resolvedWaveCapacity,
+      wave_booked_count: 0,
       created_at: new Date().toISOString(),
     };
     this.state.availability.push(newSlot);
@@ -1027,27 +1046,51 @@ class LocalDatabase {
       );
     }
 
-    if (!slot.is_available) {
-      throw new Error(
-        "This time slot has already been booked by another patient. Please choose an alternative slot."
-      );
-    }
+    let waveNum: number | null = null;
+    let estConsult: string | null = null;
 
-    // Check if this slot already has an appointment assigned
-    const duplicateBooking = this.state.appointments.find(
-      (a) =>
-        a.availability_id === availabilityId &&
-        a.status !== "cancelled" &&
-        a.status !== "rejected"
-    );
-    if (duplicateBooking) {
-      throw new Error(
-        "This time slot is no longer available. Please select another slot."
-      );
-    }
+    if (slot.is_wave) {
+      const capacity = slot.wave_capacity || 3;
+      const currentBooked = slot.wave_booked_count || 0;
+      if (currentBooked >= capacity || !slot.is_available) {
+        throw new Error(
+          "This wave arrival window has reached its maximum capacity. Please choose another wave or slot."
+        );
+      }
+      slot.wave_booked_count = currentBooked + 1;
+      waveNum = slot.wave_booked_count;
+      const [sh, sm] = slot.start_time.split(":").map(Number);
+      const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
+      const eh = Math.floor(totalMinutes / 60) % 24;
+      const em = totalMinutes % 60;
+      estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
 
-    // Mark slot unavailable
-    slot.is_available = false;
+      if (slot.wave_booked_count >= capacity) {
+        slot.is_available = false;
+      }
+    } else {
+      if (!slot.is_available) {
+        throw new Error(
+          "This time slot has already been booked by another patient. Please choose an alternative slot."
+        );
+      }
+
+      // Check if this slot already has an appointment assigned
+      const duplicateBooking = this.state.appointments.find(
+        (a) =>
+          a.availability_id === availabilityId &&
+          a.status !== "cancelled" &&
+          a.status !== "rejected"
+      );
+      if (duplicateBooking) {
+        throw new Error(
+          "This time slot is no longer available. Please select another slot."
+        );
+      }
+
+      // Mark slot unavailable
+      slot.is_available = false;
+    }
 
     // Create appointment
     this.state.counters.appointmentId += 1;
@@ -1061,6 +1104,8 @@ class LocalDatabase {
       appointment_date: appointmentDate,
       status: "pending",
       reason: reason.trim(),
+      wave_number: waveNum,
+      estimated_consult_time: estConsult,
       created_at: new Date().toISOString(),
     };
 
@@ -1068,6 +1113,127 @@ class LocalDatabase {
     this.commit();
 
     return this.hydrateAppointment(newAppointment);
+  }
+
+  // --- Atomic Rescheduling ---
+  public rescheduleAppointmentAtomic(params: {
+    appointmentId: number;
+    newAvailabilityId: number;
+    reason?: string;
+    requesterUserId: number;
+    requesterRole: UserRole;
+  }): Appointment {
+    const { appointmentId, newAvailabilityId, reason, requesterUserId, requesterRole } = params;
+
+    const appIndex = this.state.appointments.findIndex(
+      (a) => a.appointment_id === appointmentId
+    );
+    if (appIndex === -1) {
+      throw new Error("Appointment record not found.");
+    }
+    const app = this.state.appointments[appIndex];
+
+    const doctor = this.getDoctorById(app.doctor_id);
+    const patient = this.getPatientById(app.patient_id);
+    if (!doctor || !patient) {
+      throw new Error("Practitioner or patient record not found.");
+    }
+
+    // Authorization checks
+    if (requesterRole === "patient") {
+      if (patient.user_id !== requesterUserId) {
+        throw new Error("Unauthorized: You cannot reschedule appointments for other patients.");
+      }
+    } else if (requesterRole === "doctor") {
+      if (doctor.user_id !== requesterUserId) {
+        throw new Error("Unauthorized: You cannot reschedule appointments for other practitioners.");
+      }
+    }
+
+    if (app.status !== "pending" && app.status !== "confirmed") {
+      throw new Error(
+        `Cannot reschedule an appointment in '${app.status}' status. Only upcoming pending or confirmed appointments are eligible.`
+      );
+    }
+
+    if (app.availability_id === newAvailabilityId) {
+      throw new Error("The selected appointment slot is identical to your current time slot.");
+    }
+
+    const newSlot = this.getAvailabilityById(newAvailabilityId);
+    if (!newSlot) {
+      throw new Error("The requested new availability slot does not exist.");
+    }
+
+    if (newSlot.doctor_id !== app.doctor_id) {
+      throw new Error("Rescheduling is only supported with the same consulting practitioner.");
+    }
+
+    // Check availability of target slot
+    if (newSlot.is_wave) {
+      const cap = newSlot.wave_capacity || 3;
+      const booked = newSlot.wave_booked_count || 0;
+      if (booked >= cap || !newSlot.is_available) {
+        throw new Error("The selected wave arrival window is already at full capacity. Please choose another window.");
+      }
+    } else {
+      if (!newSlot.is_available) {
+        throw new Error("The requested alternative time slot has already been reserved. Please select another slot.");
+      }
+    }
+
+    // Release old slot
+    const oldSlot = this.getAvailabilityById(app.availability_id);
+    if (oldSlot) {
+      if (oldSlot.is_wave) {
+        oldSlot.wave_booked_count = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
+        oldSlot.is_available = true;
+      } else {
+        oldSlot.is_available = true;
+      }
+    }
+
+    // Claim new slot
+    let waveNum: number | null = null;
+    let estConsult: string | null = null;
+
+    if (newSlot.is_wave) {
+      const cap = newSlot.wave_capacity || 3;
+      newSlot.wave_booked_count = (newSlot.wave_booked_count || 0) + 1;
+      waveNum = newSlot.wave_booked_count;
+      const [sh, sm] = newSlot.start_time.split(":").map(Number);
+      const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
+      const eh = Math.floor(totalMinutes / 60) % 24;
+      const em = totalMinutes % 60;
+      estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+
+      if (newSlot.wave_booked_count >= cap) {
+        newSlot.is_available = false;
+      }
+    } else {
+      newSlot.is_available = false;
+    }
+
+    const previousSlotId = app.availability_id;
+    app.availability_id = newAvailabilityId;
+    app.appointment_date = `${newSlot.available_date}T${newSlot.start_time}:00.000Z`;
+    app.rescheduled_from_id = previousSlotId;
+    app.wave_number = waveNum;
+    app.estimated_consult_time = estConsult;
+    if (reason && reason.trim()) {
+      app.reason = `${app.reason} (Rescheduled: ${reason.trim()})`;
+    }
+
+    // Create in-app notification
+    this.createNotification({
+      userId: patient.user_id,
+      title: "Appointment Rescheduled",
+      message: `Your consultation with ${doctor.user?.full_name || "Dr. " + doctor.specialization} has been rescheduled to ${newSlot.available_date} at ${newSlot.start_time} IST.`,
+      type: "rescheduled",
+    });
+
+    this.commit();
+    return this.hydrateAppointment(app);
   }
 
   public updateAppointmentStatus(params: {
@@ -1122,7 +1288,12 @@ class LocalDatabase {
     ) {
       const slot = this.getAvailabilityById(app.availability_id);
       if (slot) {
-        slot.is_available = true;
+        if (slot.is_wave) {
+          slot.wave_booked_count = Math.max(0, (slot.wave_booked_count || 1) - 1);
+          slot.is_available = true;
+        } else {
+          slot.is_available = true;
+        }
       }
     }
 

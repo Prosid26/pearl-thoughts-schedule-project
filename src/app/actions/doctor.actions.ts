@@ -21,6 +21,8 @@ export async function addDoctorAvailabilityAction(
       start_time: formData.get("start_time"),
       end_time: formData.get("end_time"),
       slot_duration: formData.get("slot_duration") || 30,
+      is_wave: formData.get("is_wave") === "true",
+      wave_capacity: formData.get("wave_capacity") || undefined,
     };
 
     const validated = addAvailabilitySchema.safeParse(rawData);
@@ -31,7 +33,7 @@ export async function addDoctorAvailabilityAction(
       };
     }
 
-    const { available_date, start_time, end_time, slot_duration } =
+    const { available_date, start_time, end_time, slot_duration, is_wave, wave_capacity } =
       validated.data;
 
     await db.addAvailabilitySlot(
@@ -39,7 +41,9 @@ export async function addDoctorAvailabilityAction(
       available_date,
       start_time,
       end_time,
-      slot_duration
+      slot_duration,
+      is_wave,
+      wave_capacity
     );
 
     revalidatePath("/doctor/availability");
@@ -48,7 +52,9 @@ export async function addDoctorAvailabilityAction(
 
     return {
       success: true,
-      message: `Availability slot added for ${available_date} at ${start_time}.`,
+      message: is_wave
+        ? `Wave arrival window (${wave_capacity || 3} patients) added for ${available_date} at ${start_time}.`
+        : `Availability slot added for ${available_date} at ${start_time}.`,
     };
   } catch (err: unknown) {
     const message =
@@ -91,6 +97,9 @@ export async function updateDoctorProfileAction(
       consultation_fee: formData.get("consultation_fee") || undefined,
       bio: formData.get("bio") || undefined,
       clinic_address: formData.get("clinic_address") || undefined,
+      scheduling_mode: formData.get("scheduling_mode") || undefined,
+      wave_capacity: formData.get("wave_capacity") || undefined,
+      wave_interval_minutes: formData.get("wave_interval_minutes") || undefined,
     };
 
     const validated = updateDoctorProfileSchema.safeParse(rawData);
@@ -105,6 +114,7 @@ export async function updateDoctorProfileAction(
 
     revalidatePath("/doctor/profile");
     revalidatePath("/doctor/dashboard");
+    revalidatePath("/doctor/availability");
     revalidatePath(`/doctors/${sessionDoctor.doctor_id}`);
     revalidatePath("/doctors");
 
@@ -112,6 +122,37 @@ export async function updateDoctorProfileAction(
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to update profile.";
+    return { success: false, error: message };
+  }
+}
+
+export async function updateDoctorSchedulingPolicyAction(
+  schedulingMode: "stream" | "wave",
+  waveCapacity?: number,
+  waveIntervalMinutes?: number
+): Promise<ActionResult> {
+  try {
+    const sessionDoctor = await requireDoctor();
+
+    await db.updateDoctor(sessionDoctor.doctor_id, {
+      scheduling_mode: schedulingMode,
+      ...(waveCapacity ? { wave_capacity: waveCapacity } : {}),
+      ...(waveIntervalMinutes ? { wave_interval_minutes: waveIntervalMinutes } : {}),
+    });
+
+    revalidatePath("/doctor/availability");
+    revalidatePath("/doctor/dashboard");
+    revalidatePath("/doctor/profile");
+    revalidatePath(`/doctors/${sessionDoctor.doctor_id}`);
+    revalidatePath("/doctors");
+
+    return {
+      success: true,
+      message: `Practice scheduling mode switched to ${schedulingMode.toUpperCase()} scheduling.`,
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to update scheduling policy.";
     return { success: false, error: message };
   }
 }

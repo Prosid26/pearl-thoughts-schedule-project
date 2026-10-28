@@ -5,8 +5,9 @@ import { getSession, requireUser } from "@/lib/auth/session";
 import {
   bookAppointmentSchema,
   updateAppointmentStatusSchema,
+  rescheduleAppointmentSchema,
 } from "@/lib/validations/schemas";
-import { AppointmentStatus } from "@/types/database";
+import { AppointmentStatus, Availability } from "@/types/database";
 import { revalidatePath } from "next/cache";
 
 export interface ActionResult<T = unknown> {
@@ -127,4 +128,67 @@ export async function cancelAppointmentAction(
   appointmentId: number
 ): Promise<ActionResult> {
   return updateAppointmentStatusAction(appointmentId, "cancelled");
+}
+
+export async function rescheduleAppointmentAction(
+  appointmentId: number,
+  newAvailabilityId: number,
+  reason?: string
+): Promise<ActionResult<{ appointmentId: number }>> {
+  try {
+    const session = await requireUser();
+
+    const validated = rescheduleAppointmentSchema.safeParse({
+      appointment_id: appointmentId,
+      new_availability_id: newAvailabilityId,
+      reason,
+    });
+    if (!validated.success) {
+      return {
+        success: false,
+        error: validated.error.issues[0]?.message || "Validation failed.",
+      };
+    }
+
+    const updated = await db.rescheduleAppointmentAtomic({
+      appointmentId,
+      newAvailabilityId,
+      reason,
+      requesterUserId: session.user_id,
+      requesterRole: session.role,
+    });
+
+    revalidatePath("/patient/appointments");
+    revalidatePath("/patient/dashboard");
+    revalidatePath("/doctor/appointments");
+    revalidatePath("/doctor/dashboard");
+    revalidatePath("/doctor/availability");
+    revalidatePath("/reception/dashboard");
+    if (updated.doctor_id) {
+      revalidatePath(`/doctors/${updated.doctor_id}`);
+    }
+
+    return {
+      success: true,
+      message: "Appointment successfully rescheduled.",
+      data: { appointmentId: updated.appointment_id },
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to reschedule appointment.";
+    return { success: false, error: message };
+  }
+}
+
+export async function getDoctorAvailableSlotsAction(
+  doctorId: number
+): Promise<ActionResult<Availability[]>> {
+  try {
+    const slots = await db.getDoctorAvailability(doctorId, undefined, true);
+    return { success: true, data: slots };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to retrieve available slots.";
+    return { success: false, error: message };
+  }
 }

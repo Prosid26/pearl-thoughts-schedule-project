@@ -98,6 +98,8 @@ export const addAvailabilitySchema = z.object({
     .min(10, "Minimum duration is 10 minutes")
     .max(120, "Maximum duration is 120 minutes")
     .default(30),
+  is_wave: z.coerce.boolean().optional(),
+  wave_capacity: z.coerce.number().int().min(1).max(10).optional(),
 }).refine((data) => data.start_time < data.end_time, {
   message: "End time must be after the start time",
   path: ["end_time"],
@@ -106,6 +108,12 @@ export const addAvailabilitySchema = z.object({
 export const updateAppointmentStatusSchema = z.object({
   appointment_id: z.coerce.number().int().positive(),
   status: z.enum(["pending", "confirmed", "cancelled", "rejected", "completed"]),
+});
+
+export const rescheduleAppointmentSchema = z.object({
+  appointment_id: z.coerce.number().int().positive("Invalid appointment ID"),
+  new_availability_id: z.coerce.number().int().positive("Please select an alternative time slot"),
+  reason: z.string().trim().max(300, "Reason cannot exceed 300 characters").optional(),
 });
 
 export const updatePatientProfileSchema = z.object({
@@ -124,6 +132,9 @@ export const updateDoctorProfileSchema = z.object({
   consultation_fee: z.coerce.number().min(50).optional(),
   bio: z.string().optional(),
   clinic_address: z.string().optional(),
+  scheduling_mode: z.enum(["stream", "wave"]).optional(),
+  wave_capacity: z.coerce.number().int().min(2).max(8).optional(),
+  wave_interval_minutes: z.coerce.number().int().min(15).max(120).optional(),
 });
 
 export const addToWaitingQueueSchema = z.object({

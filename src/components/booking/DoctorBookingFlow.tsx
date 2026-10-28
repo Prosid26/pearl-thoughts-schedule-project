@@ -195,6 +195,10 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                 {slotsForDate.map((slot) => {
                   const isSelected = selectedSlotId === slot.availability_id;
                   const isAvailable = slot.is_available;
+                  const isWave = slot.is_wave;
+                  const remainingSpots = isWave && slot.wave_capacity
+                    ? Math.max(0, slot.wave_capacity - (slot.wave_booked_count || 0))
+                    : null;
 
                   return (
                     <button
@@ -205,7 +209,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                         setSelectedSlotId(slot.availability_id);
                         setErrorMessage(null);
                       }}
-                      className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                      className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
                         !isAvailable
                           ? "bg-ivory-muted border-warm-border/50 text-ink-muted cursor-not-allowed line-through"
                           : isSelected
@@ -213,20 +217,33 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                           : "bg-white border-warm-border text-ink hover:border-forest hover:bg-ivory-light"
                       }`}
                     >
-                      <span className="font-sans font-medium">
-                        {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
-                      </span>
-                      <span
-                        className={`text-[10px] ${
-                          !isAvailable
-                            ? "text-ink-muted"
-                            : isSelected
-                            ? "text-sage font-bold"
-                            : "text-forest font-semibold"
-                        }`}
-                      >
-                        {isAvailable ? "Open" : "Booked"}
-                      </span>
+                      <div className="flex items-center gap-1 font-sans font-medium">
+                        <span>{slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {isWave && (
+                          <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase font-bold ${
+                            isSelected ? "bg-white/20 text-white" : "bg-sage/50 text-forest"
+                          }`}>
+                            Wave
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] ${
+                            !isAvailable
+                              ? "text-ink-muted"
+                              : isSelected
+                              ? "text-sage font-bold"
+                              : "text-forest font-semibold"
+                          }`}
+                        >
+                          {isWave && remainingSpots !== null
+                            ? `${remainingSpots} spot${remainingSpots !== 1 ? "s" : ""} left`
+                            : isAvailable
+                            ? "Open"
+                            : "Booked"}
+                        </span>
+                      </div>
                     </button>
                   );
                 })}
@@ -280,9 +297,21 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                       </span>
                     </div>
                     <span className="font-semibold text-forest">
-                      Slot: {selectedSlot.available_date} @ {selectedSlot.start_time.slice(0, 5)}
+                      Slot: {selectedSlot.available_date} @ {selectedSlot.start_time.slice(0, 5)} IST
                     </span>
                   </div>
+
+                  {selectedSlot.is_wave && (
+                    <div className="p-3 bg-sage/30 border border-warm-border rounded-lg text-xs text-forest space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-forest" />
+                        <span>Wave Scheduling Arrival Instruction</span>
+                      </div>
+                      <p className="text-[11px] text-ink-muted">
+                        This appointment is scheduled as a wave cohort. Please arrive at the reception desk promptly at <strong>{selectedSlot.start_time.slice(0, 5)} IST</strong>. Patients in this wave are triaged in order of check-in arrival.
+                      </p>
+                    </div>
+                  )}
 
                   <button
                     type="submit"

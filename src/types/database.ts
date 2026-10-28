@@ -38,6 +38,9 @@ export interface Doctor {
   bio?: string | null;
   avatar_url?: string | null;
   clinic_address?: string | null;
+  scheduling_mode?: "stream" | "wave";
+  wave_capacity?: number;
+  wave_interval_minutes?: number;
   created_at?: string;
   user?: Pick<User, "full_name" | "email" | "phone">;
 }
@@ -50,6 +53,9 @@ export interface Availability {
   end_time: string; // HH:mm
   slot_duration: number; // in minutes (e.g., 30)
   is_available: boolean;
+  is_wave?: boolean;
+  wave_capacity?: number;
+  wave_booked_count?: number;
   created_at?: string;
 }
 
@@ -61,6 +67,9 @@ export interface Appointment {
   appointment_date: string; // ISO datetime
   status: AppointmentStatus;
   reason: string;
+  rescheduled_from_id?: number | null;
+  wave_number?: number | null;
+  estimated_consult_time?: string | null;
   created_at: string;
   patient?: Patient & { user?: Pick<User, "full_name" | "email" | "phone"> };
   doctor?: Doctor & { user?: Pick<User, "full_name" | "email" | "phone"> };
@@ -128,6 +137,7 @@ export type NotificationType =
   | "offer_expired"
   | "offer_declined"
   | "queue_update"
+  | "rescheduled"
   | "general";
 
 export interface InAppNotification {

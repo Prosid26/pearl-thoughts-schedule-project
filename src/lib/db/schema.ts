@@ -77,6 +77,9 @@ export const doctors = pgTable("doctors", {
   bio: text("bio"),
   avatar_url: text("avatar_url"),
   clinic_address: text("clinic_address"),
+  scheduling_mode: varchar("scheduling_mode", { length: 20 }).notNull().default("stream"), // 'stream' | 'wave'
+  wave_capacity: integer("wave_capacity").notNull().default(3), // patients per wave window
+  wave_interval_minutes: integer("wave_interval_minutes").notNull().default(60), // length of wave block
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -104,6 +107,9 @@ export const availability = pgTable(
     end_time: varchar("end_time", { length: 10 }).notNull(), // HH:mm
     slot_duration: integer("slot_duration").notNull().default(30),
     is_available: boolean("is_available").notNull().default(true),
+    is_wave: boolean("is_wave").notNull().default(false), // true if wave slot
+    wave_capacity: integer("wave_capacity").notNull().default(1), // total max patients in this wave
+    wave_booked_count: integer("wave_booked_count").notNull().default(0), // current accepted bookings
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -139,11 +145,13 @@ export const appointments = pgTable("appointments", {
     .references(() => doctors.doctor_id, { onDelete: "cascade" }),
   availability_id: integer("availability_id")
     .notNull()
-    .unique()
     .references(() => availability.availability_id, { onDelete: "restrict" }),
   appointment_date: timestamp("appointment_date", { withTimezone: true }).notNull(),
   status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | confirmed | cancelled | rejected | completed
   reason: text("reason").notNull(),
+  rescheduled_from_id: integer("rescheduled_from_id"),
+  wave_number: integer("wave_number"),
+  estimated_consult_time: varchar("estimated_consult_time", { length: 10 }),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -292,67 +292,58 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* 4. TECHNICAL INTEGRITY & ARCHITECTURE */}
+      {/* 4. CLINICAL INTEGRITY & ARCHITECTURE */}
       <section id="er-diagram" className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-[#1C2C25] rounded-2xl p-8 sm:p-12 text-ivory overflow-hidden relative border border-[#2D3E35]">
-            <div className="max-w-3xl space-y-5">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-sage text-forest text-xs font-semibold">
-                <Database className="w-3.5 h-3.5 text-forest" />
-                <span>Relational Architecture & Concurrency</span>
+          <div className="clinic-card p-8 sm:p-10 border-warm-border space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-wider">
+                  <Database className="w-3.5 h-3.5 text-forest" />
+                  <span>Clinical Integrity & Concurrency Architecture</span>
+                </div>
+                <h2 className="font-serif text-2xl sm:text-3xl font-bold text-ink tracking-tight">
+                  Engineered with PostgreSQL Transactions & Zero Double Booking
+                </h2>
+                <p className="text-xs sm:text-sm text-ink-muted font-sans leading-relaxed">
+                  Every appointment mutation runs through atomic database checks ensuring stream and wave schedules remain uncorrupted, with automatic slot release upon cancellation or rescheduling.
+                </p>
               </div>
 
-              <h2 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                Engineered for Concurrency Safety & Data Integrity
-              </h2>
-
-              <p className="text-xs sm:text-sm text-[#BAC8BF] leading-relaxed font-sans">
-                Medrella is built with strict adherence to database normalization,
-                row-level locking, and transactional guarantees across 8 relational tables:
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-                <div className="p-3.5 rounded-lg bg-[#243B32] border border-[#345245]">
-                  <div className="font-bold text-terracotta">USERS & AUTHENTICATION</div>
-                  <div className="text-[#BAC8BF] text-[11px] mt-1">
-                    Bcrypt password hashing, HTTP-only JWT sessions, and role guards for doctors, patients, and reception.
-                  </div>
-                </div>
-                <div className="p-3.5 rounded-lg bg-[#243B32] border border-[#345245]">
-                  <div className="font-bold text-terracotta">AVAILABILITY & APPOINTMENTS</div>
-                  <div className="text-[#BAC8BF] text-[11px] mt-1">
-                    Atomic slot reservations preventing double-booking; auto-restoration upon cancellation.
-                  </div>
-                </div>
-                <div className="p-3.5 rounded-lg bg-[#243B32] border border-[#345245]">
-                  <div className="font-bold text-terracotta">SMART WAITING QUEUE</div>
-                  <div className="text-[#BAC8BF] text-[11px] mt-1">
-                    Walk-in triage supporting waiting, called, in-consultation, and completed transitions.
-                  </div>
-                </div>
-                <div className="p-3.5 rounded-lg bg-[#243B32] border border-[#345245]">
-                  <div className="font-bold text-terracotta">EARLY SLOT OFFERS CASCADE</div>
-                  <div className="text-[#BAC8BF] text-[11px] mt-1">
-                    2-minute countdown timer, automated fallback cascades, and single-claim atomic acceptance.
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
                 <Link
                   href="/schedule-project-er-diagram.png.png"
                   target="_blank"
-                  className="btn-terracotta px-4 py-2 text-xs font-bold text-ink inline-flex items-center gap-1.5"
+                  className="btn-ivory text-xs px-4 py-2.5 font-semibold inline-flex items-center gap-1.5"
                 >
-                  <FileCode2 className="w-4 h-4" />
-                  <span>Inspect ER Diagram Specification</span>
+                  <FileCode2 className="w-4 h-4 text-forest" />
+                  <span>View ER Schema</span>
                 </Link>
                 <Link
                   href="/doctors"
-                  className="px-4 py-2 rounded-md text-xs font-semibold bg-[#243B32] hover:bg-[#2F4C40] text-ivory border border-[#3E5C4E] transition-colors"
+                  className="btn-forest text-xs px-4 py-2.5 font-bold"
                 >
-                  Test Appointment Booking
+                  Browse Specialists
                 </Link>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-warm-border-subtle text-xs">
+              <div>
+                <div className="font-serif font-bold text-ink">Atomic Reservation</div>
+                <div className="text-[11px] text-ink-muted mt-0.5">Row-level locking guarantees single claim per slot.</div>
+              </div>
+              <div>
+                <div className="font-serif font-bold text-ink">Stream & Wave Modes</div>
+                <div className="text-[11px] text-ink-muted mt-0.5">Sequential timeslots or grouped cohort arrival windows.</div>
+              </div>
+              <div>
+                <div className="font-serif font-bold text-ink">Smart Early Cascade</div>
+                <div className="text-[11px] text-ink-muted mt-0.5">2-minute response countdown on consultations finished early.</div>
+              </div>
+              <div>
+                <div className="font-serif font-bold text-ink">Atomic Rescheduling</div>
+                <div className="text-[11px] text-ink-muted mt-0.5">Simultaneous slot reservation and old-slot release in 1 step.</div>
               </div>
             </div>
           </div>

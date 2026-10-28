@@ -410,6 +410,136 @@ async function runTestSuite() {
     "Slot returned to is_available = true for standard public booking"
   );
 
+  // TEST 17: Stream vs Wave Scheduling Configuration
+  console.log("\nTEST 17: Doctor Scheduling Policy (Stream vs Wave Mode)");
+  const waveDoctor = localDb.updateDoctor(targetDoctor.doctor_id, {
+    scheduling_mode: "wave",
+    wave_capacity: 2,
+    wave_interval_minutes: 60,
+  });
+  assert(waveDoctor.scheduling_mode === "wave", "Doctor successfully configured for wave scheduling");
+  assert(waveDoctor.wave_capacity === 2, "Doctor wave capacity set to 2 patients per arrival wave");
+
+  // TEST 18: Wave Slot Booking & Capacity Tracking
+  console.log("\nTEST 18: Wave Slot Booking & Capacity Tracking");
+  const waveDate = "2099-11-20";
+  const existingWave = localDb.getDoctorAvailability(targetDoctor.doctor_id).find(
+    (s) => s.available_date === waveDate && s.start_time === "14:00"
+  );
+  if (existingWave) {
+    // Cancel any active appointments on this slot so it can be cleanly deleted
+    const linkedApps = localDb.getAppointmentsForDoctor(targetDoctor.doctor_id).filter(
+      (a) => a.availability_id === existingWave.availability_id && a.status !== "cancelled"
+    );
+    for (const a of linkedApps) {
+      localDb.updateAppointmentStatus({
+        appointmentId: a.appointment_id,
+        newStatus: "cancelled",
+        requesterUserId: 1,
+        requesterRole: "admin",
+      });
+    }
+    localDb.deleteAvailabilitySlot(existingWave.availability_id, targetDoctor.doctor_id);
+  }
+  const waveSlot = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    waveDate,
+    "14:00",
+    "15:00",
+    60,
+    true,
+    2
+  );
+  assert(waveSlot.is_wave === true, "Availability slot created with is_wave = true");
+  assert(waveSlot.wave_capacity === 2, "Wave slot has capacity of 2 patients");
+
+  // Book patient 1 into wave
+  const waveBooking1 = localDb.bookAppointmentAtomic({
+    patientId: newPatient.patient_id,
+    doctorId: targetDoctor.doctor_id,
+    availabilityId: waveSlot.availability_id,
+    reason: "Wave consultation 1",
+  });
+  assert(waveBooking1.wave_number === 1, "First patient assigned wave sequence #1");
+  assert(waveBooking1.estimated_consult_time === "14:00", "First patient estimated consult matches wave start (14:00)");
+  assert(waveSlot.is_available === true, "Wave slot remains is_available = true after 1 of 2 bookings");
+
+  // Book patient 2 into wave
+  const waveBooking2 = localDb.bookAppointmentAtomic({
+    patientId: patient2.patient_id,
+    doctorId: targetDoctor.doctor_id,
+    availabilityId: waveSlot.availability_id,
+    reason: "Wave consultation 2",
+  });
+  assert(waveBooking2.wave_number === 2, "Second patient assigned wave sequence #2");
+  assert(waveBooking2.estimated_consult_time === "14:20", "Second patient estimated consult offset by 20m (14:20)");
+  assert(waveSlot.is_available === false, "Wave slot marked is_available = false upon reaching capacity (2/2)");
+
+  // TEST 19: Wave Overfill Prevention
+  console.log("\nTEST 19: Wave Overfill Prevention");
+  let waveOverfillBlocked = false;
+  try {
+    localDb.bookAppointmentAtomic({
+      patientId: newPatient.patient_id,
+      doctorId: targetDoctor.doctor_id,
+      availabilityId: waveSlot.availability_id,
+      reason: "Wave consultation 3 (should fail)",
+    });
+  } catch {
+    waveOverfillBlocked = true;
+  }
+  assert(waveOverfillBlocked, "Rejected attempt to book beyond wave capacity limit");
+
+  // TEST 20: Appointment Rescheduling Workflow
+  console.log("\nTEST 20: Atomic Appointment Rescheduling Workflow");
+  const rescheduleDate = "2099-11-25";
+  const existingResched = localDb.getDoctorAvailability(targetDoctor.doctor_id).find(
+    (s) => s.available_date === rescheduleDate && s.start_time === "11:00"
+  );
+  if (existingResched) {
+    const linkedApps = localDb.getAppointmentsForDoctor(targetDoctor.doctor_id).filter(
+      (a) => a.availability_id === existingResched.availability_id && a.status !== "cancelled"
+    );
+    for (const a of linkedApps) {
+      localDb.updateAppointmentStatus({
+        appointmentId: a.appointment_id,
+        newStatus: "cancelled",
+        requesterUserId: 1,
+        requesterRole: "admin",
+      });
+    }
+    localDb.deleteAvailabilitySlot(existingResched.availability_id, targetDoctor.doctor_id);
+  }
+  const altSlot = localDb.addAvailabilitySlot(
+    targetDoctor.doctor_id,
+    rescheduleDate,
+    "11:00",
+    "11:30",
+    30,
+    false,
+    1
+  );
+  assert(altSlot.is_available === true, "Alternative time slot open for rescheduling");
+
+  // Reschedule waveBooking2 out of waveSlot into altSlot
+  const rescheduledApp = localDb.rescheduleAppointmentAtomic({
+    appointmentId: waveBooking2.appointment_id,
+    newAvailabilityId: altSlot.availability_id,
+    reason: "Schedule conflict resolved",
+    requesterUserId: userPatient2.user_id,
+    requesterRole: "patient",
+  });
+  assert(rescheduledApp.availability_id === altSlot.availability_id, "Appointment successfully moved to new slot");
+  assert(rescheduledApp.rescheduled_from_id === waveSlot.availability_id, "Preserved record of original slot ID");
+  assert(altSlot.is_available === false, "Target slot atomically reserved (is_available = false)");
+  assert(waveSlot.is_available === true, "Original wave slot capacity restored (is_available = true)");
+  assert(waveSlot.wave_booked_count === 1, "Wave booked count decremented from 2 to 1");
+
+  // Patient notification created
+  const patient2Notifications = localDb.getNotificationsForUser(userPatient2.user_id);
+  const reschedNotif = patient2Notifications.find((n) => n.type === "rescheduled");
+  assert(Boolean(reschedNotif), "Patient received in-app notification for successful reschedule");
+
   console.log("\n=========================================================");
   console.log(`TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED (100%)`);
   console.log("=========================================================\n");

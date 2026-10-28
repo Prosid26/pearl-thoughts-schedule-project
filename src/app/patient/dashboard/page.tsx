@@ -76,61 +76,25 @@ export default async function PatientDashboardPage() {
       {/* Prominent Earlier-Slot Offer Banner with Live 2-Min Countdown */}
       <EarlySlotOfferBanner initialOffer={initialOffer} />
 
-      {/* Calm Architectural Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="clinic-card p-5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-            Total Consultations
-          </div>
-          <div className="font-serif text-2xl font-bold text-ink mt-1">
-            {appointments.length}
-          </div>
-        </div>
-
-        <div className="clinic-card p-5 border-l-4 border-l-forest">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-forest">
-            Upcoming
-          </div>
-          <div className="font-serif text-2xl font-bold text-forest mt-1">
-            {upcomingAppointments.length}
-          </div>
-        </div>
-
-        <div className="clinic-card p-5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-            Completed Visits
-          </div>
-          <div className="font-serif text-2xl font-bold text-ink mt-1">
-            {appointments.filter((a) => a.status === "completed").length}
-          </div>
-        </div>
-
-        <div className="clinic-card p-5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-            Cancelled
-          </div>
-          <div className="font-serif text-2xl font-bold text-ink-muted mt-1">
-            {
-              appointments.filter(
-                (a) => a.status === "cancelled" || a.status === "rejected"
-              ).length
-            }
-          </div>
-        </div>
-      </div>
-
       {/* Next Upcoming Consultation Highlight */}
       {nextAppointment && (
-        <div className="bg-forest rounded-xl p-6 sm:p-7 text-ivory shadow-md space-y-4 border border-forest-dark">
-          <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-[#182821] text-sage border border-sage-dark/40">
-              <Clock className="w-3.5 h-3.5 text-terracotta" />
-              <span>Next Confirmed Visit</span>
-            </span>
+        <div className="bg-forest rounded-2xl p-6 sm:p-7 text-ivory shadow-sm space-y-5 border border-forest-dark/40">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#182821] text-sage border border-sage-dark/40">
+                <Clock className="w-3.5 h-3.5 text-terracotta" />
+                <span>Next Confirmed Visit</span>
+              </span>
+              {nextAppointment.wave_number && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-sage/20 text-sage border border-sage/30">
+                  Wave #{nextAppointment.wave_number} • Est. {nextAppointment.estimated_consult_time || "TBD"}
+                </span>
+              )}
+            </div>
             <AppointmentStatusBadge status={nextAppointment.status} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-1 items-center">
             <div className="md:col-span-8 flex items-start gap-4">
               <DoctorAvatar
                 avatarUrl={nextAppointment.doctor?.avatar_url}
@@ -138,19 +102,24 @@ export default async function PatientDashboardPage() {
                 doctorName={nextAppointment.doctor?.user?.full_name}
                 size="lg"
               />
-              <div className="space-y-1">
-                <h3 className="font-serif text-xl font-bold text-white">
+              <div className="space-y-1.5">
+                <h3 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-tight">
                   {nextAppointment.doctor?.user?.full_name || "Doctor"}
                 </h3>
                 <p className="text-xs text-[#BAC8BF]">
                   {nextAppointment.doctor?.specialization} • {nextAppointment.doctor?.qualification}
                 </p>
-                <div className="flex items-center gap-2 text-xs text-sage pt-1">
-                  <Calendar className="w-3.5 h-3.5 text-terracotta" />
-                  <span>
-                    {formatISTDate(nextAppointment.appointment_date)} at{" "}
-                    {new Date(nextAppointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
-                  </span>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-sage pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-terracotta" />
+                    <span>{formatISTDate(nextAppointment.appointment_date)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-ivory/80 font-mono text-[11px]">
+                    <Clock className="w-3.5 h-3.5 text-terracotta" />
+                    <span>
+                      {new Date(nextAppointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                    </span>
+                  </div>
                 </div>
                 {nextAppointment.doctor?.clinic_address && (
                   <div className="flex items-center gap-1.5 text-[11px] text-[#BAC8BF] pt-0.5">
@@ -161,8 +130,8 @@ export default async function PatientDashboardPage() {
               </div>
             </div>
 
-            <div className="md:col-span-4 flex flex-col items-start md:items-end justify-center gap-2">
-              <div className="text-right">
+            <div className="md:col-span-4 flex flex-col items-start md:items-end justify-center gap-3">
+              <div className="text-left md:text-right">
                 <span className="text-[11px] text-sage block font-sans">Consultation Fee</span>
                 <span className="font-serif text-xl font-bold text-terracotta">
                   {nextAppointment.doctor?.consultation_fee
@@ -170,13 +139,21 @@ export default async function PatientDashboardPage() {
                     : "Covered"}
                 </span>
               </div>
-              <Link
-                href="/patient/appointments"
-                className="btn-terracotta text-xs px-4 py-2 gap-1 mt-1 font-bold"
-              >
-                <span>View Full Details</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/patient/appointments"
+                  className="btn-ivory text-xs px-3.5 py-2 font-medium"
+                >
+                  Reschedule
+                </Link>
+                <Link
+                  href="/patient/appointments"
+                  className="btn-terracotta text-xs px-4 py-2 gap-1 font-bold"
+                >
+                  <span>View Details</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
