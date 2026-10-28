@@ -11,6 +11,7 @@ import {
   Sparkles,
   FileCode2,
 } from "lucide-react";
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 
 export default async function HomePage() {
   const doctors = await db.getDoctors();
@@ -113,16 +114,24 @@ export default async function HomePage() {
                 {/* Simulated Appointment Preview */}
                 <div className="mt-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-3">
                   <div className="flex items-start justify-between">
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">
-                        Dr. Sarah Jenkins, MD
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Senior Cardiologist • Harvard Medical
+                    <div className="flex items-center gap-2.5">
+                      <DoctorAvatar
+                        name="Dr. Ananya Sharma"
+                        gender="female"
+                        size="xs"
+                        showActiveBadge
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">
+                          Dr. Ananya Sharma, MD, DM
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Senior Cardiologist • Andheri West, Mumbai
+                        </div>
                       </div>
                     </div>
                     <span className="text-xs font-bold text-teal-700">
-                      $120 / visit
+                      ₹1,000 / visit
                     </span>
                   </div>
 
@@ -175,7 +184,7 @@ export default async function HomePage() {
               href="/doctors"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800"
             >
-              <span>View All 5 Doctors & Real Slots</span>
+              <span>View All {doctors.length} Doctors & Real Slots</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

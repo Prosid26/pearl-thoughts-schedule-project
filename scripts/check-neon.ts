@@ -21,6 +21,11 @@ async function check() {
     console.log(`  • doctors: ${doctorsCount[0].count} rows`);
     console.log(`  • availability: ${availabilityCount[0].count} rows`);
     console.log(`  • appointments: ${appointmentsCount[0].count} rows`);
+
+    const users = await sql`SELECT user_id, full_name, email, role FROM users ORDER BY user_id;`;
+    const docs = await sql`SELECT doctor_id, user_id, specialization, consultation_fee, avatar_url, clinic_address FROM doctors ORDER BY doctor_id;`;
+    console.log("Users:", JSON.stringify(users, null, 2));
+    console.log("Doctors:", JSON.stringify(docs, null, 2));
   } catch (err: any) {
     console.error("Neon Query Error:", err.message);
   }

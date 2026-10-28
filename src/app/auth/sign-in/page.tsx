@@ -86,18 +86,18 @@ export default function SignInPage() {
               className="px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white hover:bg-teal-50 text-slate-700 font-medium text-left truncate transition-colors"
             >
               <div className="font-bold text-[11px] text-teal-800 truncate">
-                John Doe
+                Aarav Sharma
               </div>
               <div className="text-[10px] text-slate-500">Patient Demo</div>
             </button>
 
             <button
               type="button"
-              onClick={() => handleFillDemo("doctor.sarah@demo.com")}
+              onClick={() => handleFillDemo("doctor.ananya@demo.com")}
               className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 text-slate-700 font-medium text-left truncate transition-colors"
             >
               <div className="font-bold text-[11px] text-emerald-800 truncate">
-                Dr. Sarah Jenkins
+                Dr. Ananya Sharma
               </div>
               <div className="text-[10px] text-slate-500">Cardiologist Demo</div>
             </button>

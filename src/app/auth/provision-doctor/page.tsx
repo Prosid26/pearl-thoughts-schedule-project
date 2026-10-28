@@ -122,7 +122,7 @@ export default function ProvisionDoctorPage() {
                   type="email"
                   name="email"
                   required
-                  placeholder="dr.wright@clinic.com"
+                  placeholder="dr.sharma@clinic.com"
                   className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                 />
               </div>
@@ -141,7 +141,7 @@ export default function ProvisionDoctorPage() {
                   type="tel"
                   name="phone"
                   required
-                  placeholder="+1 (555) 345-6789"
+                  placeholder="+91 98201 23456"
                   className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                 />
               </div>
@@ -182,6 +182,8 @@ export default function ProvisionDoctorPage() {
                 <option value="Pediatrics">Pediatrics</option>
                 <option value="Orthopedics">Orthopedics</option>
                 <option value="General Medicine">General Medicine</option>
+                <option value="Gynecology">Gynecology</option>
+                <option value="Dentistry">Dentistry</option>
                 <option value="Psychiatry">Psychiatry</option>
               </select>
             </div>
@@ -194,7 +196,7 @@ export default function ProvisionDoctorPage() {
                 type="text"
                 name="qualification"
                 required
-                placeholder="e.g. MBBS, MD (Oxford)"
+                placeholder="e.g. MBBS, MD, DM (AIIMS)"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
               />
             </div>
@@ -218,14 +220,15 @@ export default function ProvisionDoctorPage() {
 
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
-                Consultation Fee ($ USD) *
+                Consultation Fee (₹ INR) *
               </label>
               <input
                 type="number"
                 name="consultation_fee"
                 required
-                min={10}
-                defaultValue={100}
+                min={50}
+                step={50}
+                defaultValue={800}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
               />
             </div>
@@ -239,7 +242,7 @@ export default function ProvisionDoctorPage() {
             <input
               type="text"
               name="clinic_address"
-              placeholder="Suite 300, Medical Tower, Boston"
+              placeholder="Suite 402, Link Road, Andheri West, Mumbai"
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             />
           </div>

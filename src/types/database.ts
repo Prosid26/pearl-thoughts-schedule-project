@@ -34,6 +34,7 @@ export interface Doctor {
   qualification: string;
   experience_years: number;
   consultation_fee: number;
+  gender?: "male" | "female" | string | null;
   bio?: string | null;
   avatar_url?: string | null;
   clinic_address?: string | null;

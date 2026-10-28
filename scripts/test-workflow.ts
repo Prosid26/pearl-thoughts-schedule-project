@@ -69,7 +69,7 @@ async function runTestSuite() {
   console.log("\nTEST 4: Doctor-Specific Availability Slots");
   const targetDoctor = cardiologists[0];
   const openSlots = localDb.getDoctorAvailability(targetDoctor.doctor_id, undefined, true);
-  assert(openSlots.length > 0, `Found ${openSlots.length} available slots for Dr. ${targetDoctor.user?.full_name}`);
+  assert(openSlots.length > 0, `Found ${openSlots.length} available slots for ${targetDoctor.user?.full_name}`);
   const slotToBook = openSlots[0];
 
   // TEST 5: Atomic Slot Booking

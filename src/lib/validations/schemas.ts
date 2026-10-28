@@ -66,8 +66,8 @@ export const doctorProvisioningSchema = z.object({
     .max(60, "Invalid experience years"),
   consultation_fee: z.coerce
     .number()
-    .min(10, "Minimum consultation fee is $10")
-    .max(5000, "Fee exceeds maximum allowance"),
+    .min(50, "Minimum consultation fee is ₹50")
+    .max(50000, "Fee exceeds maximum allowance"),
   bio: z.string().max(1000).optional(),
   clinic_address: z.string().max(300).optional(),
 });
@@ -121,7 +121,7 @@ export const updateDoctorProfileSchema = z.object({
   specialization: z.string().trim().min(2).optional(),
   qualification: z.string().trim().min(2).optional(),
   experience_years: z.coerce.number().int().min(0).optional(),
-  consultation_fee: z.coerce.number().min(10).optional(),
+  consultation_fee: z.coerce.number().min(50).optional(),
   bio: z.string().optional(),
   clinic_address: z.string().optional(),
 });

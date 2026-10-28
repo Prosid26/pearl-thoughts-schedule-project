@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="femDocBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F0FDFA" />
+      <stop offset="100%" stop-color="#E0F2FE" />
+    </linearGradient>
+    <linearGradient id="femDocCoat" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F1F5F9" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="120" height="120" rx="24" fill="url(#femDocBg)" stroke="#CCFBF1" stroke-width="1.5" />
+
+  <!-- Inner Subtle Ring -->
+  <circle cx="60" cy="60" r="52" fill="none" stroke="#99F6E4" stroke-width="1" stroke-dasharray="2 3" opacity="0.6" />
+
+  <!-- Doctor Silhouette Group -->
+  <g id="doctor-female-silhouette">
+    <!-- Hair Back Volume / Bun Silhouette -->
+    <ellipse cx="60" cy="48" rx="20" ry="21" fill="#134E4A" />
+    <!-- Hair Bun Top -->
+    <ellipse cx="60" cy="30" rx="10" ry="6" fill="#134E4A" />
+
+    <!-- Shoulders & Torso (Doctor's Lab Coat) -->
+    <path d="M24 110 C24 88, 40 80, 60 80 C80 80, 96 88, 96 110 Z" fill="#0F766E" />
+
+    <!-- White Lab Coat Lapels / Inner Scrub -->
+    <path d="M43 110 L51 82 L69 82 L77 110 Z" fill="url(#femDocCoat)" stroke="#CBD5E1" stroke-width="0.75" />
+    <!-- V-Neck Scrub Inner -->
+    <path d="M53 82 L60 95 L67 82 Z" fill="#0D9488" />
+
+    <!-- Stethoscope around neck -->
+    <!-- Left Stethoscope Tube -->
+    <path d="M48 83 C46 95, 48 103, 52 106" fill="none" stroke="#1E293B" stroke-width="2" stroke-linecap="round" />
+    <!-- Right Stethoscope Tube with Bell -->
+    <path d="M72 83 C74 95, 72 101, 67 105" fill="none" stroke="#1E293B" stroke-width="2" stroke-linecap="round" />
+    <!-- Stethoscope Chest Piece (Bell) -->
+    <circle cx="67" cy="106" r="3" fill="#0F766E" stroke="#1E293B" stroke-width="1.5" />
+
+    <!-- Neck -->
+    <path d="M53 64 L53 80 C56 83, 64 83, 67 80 L67 64 Z" fill="#0D9488" opacity="0.9" />
+
+    <!-- Head / Face Silhouette -->
+    <ellipse cx="60" cy="53" rx="14.5" ry="18" fill="#0F766E" />
+
+    <!-- Professional Female Hair Framing Silhouette -->
+    <path d="M44 48 C44 38, 50 33, 60 33 C70 33, 76 38, 76 48 C74 44, 70 38, 60 39 C49 39, 46 44, 44 48 Z" fill="#134E4A" />
+    <path d="M43 45 C42 53, 44 63, 47 67 C45 61, 45 54, 45 47 Z" fill="#134E4A" />
+    <path d="M77 45 C78 53, 76 63, 73 67 C75 61, 75 54, 75 47 Z" fill="#134E4A" />
+  </g>
+</svg>

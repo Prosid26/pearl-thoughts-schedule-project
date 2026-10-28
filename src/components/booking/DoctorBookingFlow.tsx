@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { formatINR } from "@/lib/utils/currency";
 
 interface Props {
   doctor: Doctor;
@@ -103,7 +104,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
           <div className="text-right">
             <span className="text-xs text-teal-200 block">Consultation Fee</span>
             <span className="text-2xl font-extrabold text-white">
-              ${Number(doctor.consultation_fee).toFixed(0)}
+              {formatINR(doctor.consultation_fee)}
             </span>
           </div>
         </div>
@@ -292,8 +293,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                       <>
                         <CheckCircle2 className="w-4 h-4" />
                         <span>
-                          Confirm Appointment ($
-                          {Number(doctor.consultation_fee).toFixed(0)})
+                          Confirm Appointment ({formatINR(doctor.consultation_fee)})
                         </span>
                       </>
                     )}

@@ -76,7 +76,7 @@ export function DemoSwitcher() {
               >
                 <div>
                   <div className="font-medium text-slate-800 group-hover:text-teal-900">
-                    John Doe (Patient)
+                    Aarav Sharma (Patient)
                   </div>
                   <div className="text-[11px] text-slate-500">
                     patient@demo.com
@@ -98,7 +98,7 @@ export function DemoSwitcher() {
               >
                 <div>
                   <div className="font-medium text-slate-800 group-hover:text-teal-900">
-                    Jane Smith (Patient)
+                    Priya Verma (Patient)
                   </div>
                   <div className="text-[11px] text-slate-500">
                     jane@demo.com
@@ -119,18 +119,18 @@ export function DemoSwitcher() {
 
               <button
                 disabled={loadingEmail !== null}
-                onClick={() => handleQuickLogin("doctor.sarah@demo.com")}
+                onClick={() => handleQuickLogin("doctor.ananya@demo.com")}
                 className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-emerald-50 hover:text-emerald-900 border border-transparent hover:border-emerald-200 transition-all group"
               >
                 <div>
                   <div className="font-medium text-slate-800 group-hover:text-emerald-900">
-                    Dr. Sarah Jenkins
+                    Dr. Ananya Sharma
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Cardiology • doctor.sarah@demo.com
+                    Cardiology • doctor.ananya@demo.com
                   </div>
                 </div>
-                {loadingEmail === "doctor.sarah@demo.com" ? (
+                {loadingEmail === "doctor.ananya@demo.com" ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
                 ) : (
                   <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 font-medium">
@@ -141,18 +141,62 @@ export function DemoSwitcher() {
 
               <button
                 disabled={loadingEmail !== null}
-                onClick={() => handleQuickLogin("doctor.marcus@demo.com")}
+                onClick={() => handleQuickLogin("doctor.rahul@demo.com")}
                 className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-emerald-50 hover:text-emerald-900 border border-transparent hover:border-emerald-200 transition-all group"
               >
                 <div>
                   <div className="font-medium text-slate-800 group-hover:text-emerald-900">
-                    Dr. Marcus Vance
+                    Dr. Rahul Mehta
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Dermatology • doctor.marcus@demo.com
+                    Orthopedics • doctor.rahul@demo.com
                   </div>
                 </div>
-                {loadingEmail === "doctor.marcus@demo.com" ? (
+                {loadingEmail === "doctor.rahul@demo.com" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                ) : (
+                  <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 font-medium">
+                    Login →
+                  </span>
+                )}
+              </button>
+
+              <button
+                disabled={loadingEmail !== null}
+                onClick={() => handleQuickLogin("doctor.priya@demo.com")}
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-emerald-50 hover:text-emerald-900 border border-transparent hover:border-emerald-200 transition-all group"
+              >
+                <div>
+                  <div className="font-medium text-slate-800 group-hover:text-emerald-900">
+                    Dr. Priya Nair
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Dermatology • doctor.priya@demo.com
+                  </div>
+                </div>
+                {loadingEmail === "doctor.priya@demo.com" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                ) : (
+                  <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 font-medium">
+                    Login →
+                  </span>
+                )}
+              </button>
+
+              <button
+                disabled={loadingEmail !== null}
+                onClick={() => handleQuickLogin("doctor.arjun@demo.com")}
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-emerald-50 hover:text-emerald-900 border border-transparent hover:border-emerald-200 transition-all group"
+              >
+                <div>
+                  <div className="font-medium text-slate-800 group-hover:text-emerald-900">
+                    Dr. Arjun Deshmukh
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    General Medicine • doctor.arjun@demo.com
+                  </div>
+                </div>
+                {loadingEmail === "doctor.arjun@demo.com" ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
                 ) : (
                   <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 font-medium">

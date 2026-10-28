@@ -220,7 +220,7 @@ export async function provisionDoctorAction(
       data.experience_years,
       data.consultation_fee,
       data.bio,
-      "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=300",
+      undefined,
       data.clinic_address
     );
 

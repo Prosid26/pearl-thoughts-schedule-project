@@ -20,19 +20,48 @@ export const getDatabaseMode = (): "neon" | "local" => {
  * Universal Database Repository (Drizzle ORM + Neon PostgreSQL with Local Fallback)
  * Strongly typed interface adhering to schedule-project-er-diagram.png.png
  */
+// High-performance in-memory cache for public doctor catalog
+let cachedDoctorsList: Doctor[] | null = null;
+let cachedDoctorsExpiry = 0;
+const DOCTORS_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+export const invalidateDoctorsCache = () => {
+  cachedDoctorsList = null;
+  cachedDoctorsExpiry = 0;
+};
+
 export const db = {
   getMode: getDatabaseMode,
+  invalidateDoctorsCache,
 
   // --- Users ---
   getUserByEmail: async (email: string): Promise<User | null> => {
+    const normalized = email.toLowerCase().trim();
+    const legacyAliases: Record<string, string> = {
+      "doctor.sarah@demo.com": "doctor.ananya@demo.com",
+      "doctor.marcus@demo.com": "doctor.priya@demo.com",
+      "doctor.elena@demo.com": "doctor.rohan@demo.com",
+      "doctor.david@demo.com": "doctor.sneha@demo.com",
+    };
+    const targetEmail = legacyAliases[normalized] || normalized;
+
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const result = await neonDb
+        let result = await neonDb
           .select()
           .from(schema.users)
-          .where(eq(schema.users.email, email.toLowerCase().trim()))
+          .where(eq(schema.users.email, targetEmail))
           .limit(1);
+
+        if (result.length === 0 && targetEmail !== normalized) {
+          result = await neonDb
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.email, normalized))
+            .limit(1);
+        }
+
         if (result.length > 0) {
           const u = result[0];
           return {
@@ -276,6 +305,12 @@ export const db = {
   },
 
   getDoctorById: async (doctorId: number): Promise<Doctor | null> => {
+    // Check active memory cache first for instant sub-millisecond response
+    if (cachedDoctorsList && Date.now() < cachedDoctorsExpiry) {
+      const match = cachedDoctorsList.find((d) => d.doctor_id === doctorId);
+      if (match) return match;
+    }
+
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
@@ -313,54 +348,71 @@ export const db = {
     specialization?: string;
     minExperience?: number;
   }): Promise<Doctor[]> => {
-    if (isNeonConfigured) {
-      const neonDb = getNeonDb();
-      if (neonDb) {
-        const query = neonDb
-          .select({
-            doctor: schema.doctors,
-            user: {
-              full_name: schema.users.full_name,
-              email: schema.users.email,
-              phone: schema.users.phone,
-            },
-          })
-          .from(schema.doctors)
-          .innerJoin(schema.users, eq(schema.doctors.user_id, schema.users.user_id));
+    const now = Date.now();
+    let baseList: Doctor[];
 
-        const rows = await query;
-        let list: Doctor[] = rows.map(({ doctor, user }) => ({
-          ...doctor,
-          consultation_fee: parseFloat(doctor.consultation_fee),
-          created_at: doctor.created_at.toISOString(),
-          user,
-        }));
+    if (cachedDoctorsList && now < cachedDoctorsExpiry) {
+      baseList = cachedDoctorsList;
+    } else {
+      if (isNeonConfigured) {
+        const neonDb = getNeonDb();
+        if (neonDb) {
+          const query = neonDb
+            .select({
+              doctor: schema.doctors,
+              user: {
+                full_name: schema.users.full_name,
+                email: schema.users.email,
+                phone: schema.users.phone,
+              },
+            })
+            .from(schema.doctors)
+            .innerJoin(
+              schema.users,
+              eq(schema.doctors.user_id, schema.users.user_id)
+            );
 
-        if (filters?.specialization && filters.specialization !== "All") {
-          list = list.filter(
-            (d) =>
-              d.specialization.toLowerCase() ===
-              filters.specialization!.toLowerCase()
-          );
+          const rows = await query;
+          baseList = rows.map(({ doctor, user }) => ({
+            ...doctor,
+            consultation_fee: parseFloat(doctor.consultation_fee),
+            created_at: doctor.created_at.toISOString(),
+            user,
+          }));
+          cachedDoctorsList = baseList;
+          cachedDoctorsExpiry = now + DOCTORS_CACHE_TTL_MS;
+        } else {
+          baseList = localDb.getDoctors();
         }
-        if (filters?.minExperience) {
-          list = list.filter(
-            (d) => d.experience_years >= filters.minExperience!
-          );
-        }
-        if (filters?.search && filters.search.trim()) {
-          const q = filters.search.toLowerCase().trim();
-          list = list.filter(
-            (d) =>
-              d.user?.full_name?.toLowerCase().includes(q) ||
-              d.specialization.toLowerCase().includes(q) ||
-              d.qualification.toLowerCase().includes(q)
-          );
-        }
-        return list;
+      } else {
+        baseList = localDb.getDoctors();
       }
     }
-    return localDb.getDoctors(filters);
+
+    let list = [...baseList];
+
+    if (filters?.specialization && filters.specialization !== "All") {
+      list = list.filter(
+        (d) =>
+          d.specialization.toLowerCase() ===
+          filters.specialization!.toLowerCase()
+      );
+    }
+    if (filters?.minExperience) {
+      list = list.filter(
+        (d) => d.experience_years >= filters.minExperience!
+      );
+    }
+    if (filters?.search && filters.search.trim()) {
+      const q = filters.search.toLowerCase().trim();
+      list = list.filter(
+        (d) =>
+          d.user?.full_name?.toLowerCase().includes(q) ||
+          d.specialization.toLowerCase().includes(q) ||
+          d.qualification.toLowerCase().includes(q)
+      );
+    }
+    return list;
   },
 
   createDoctor: async (
@@ -390,6 +442,7 @@ export const db = {
           })
           .returning();
         const d = result[0];
+        invalidateDoctorsCache();
         return {
           ...d,
           consultation_fee: parseFloat(d.consultation_fee),
@@ -397,6 +450,7 @@ export const db = {
         };
       }
     }
+    invalidateDoctorsCache();
     return localDb.createDoctor(
       userId,
       specialization,
@@ -421,6 +475,7 @@ export const db = {
       clinic_address?: string;
     }
   ): Promise<Doctor> => {
+    invalidateDoctorsCache();
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
@@ -452,6 +507,7 @@ export const db = {
             .where(eq(schema.users.user_id, existing.user_id));
         }
 
+        invalidateDoctorsCache();
         return (await db.getDoctorById(doctorId))!;
       }
     }

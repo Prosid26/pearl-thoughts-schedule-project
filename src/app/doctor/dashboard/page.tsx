@@ -11,6 +11,8 @@ import {
   AlertCircle,
   PlusCircle,
 } from "lucide-react";
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
+import { formatINR } from "@/lib/utils/currency";
 
 export default async function DoctorDashboardPage() {
   const session = await getSession();
@@ -38,17 +40,26 @@ export default async function DoctorDashboardPage() {
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-            <Stethoscope className="w-4 h-4" />
-            <span>Doctor Practice Portal</span>
+        <div className="flex items-start gap-4">
+          <DoctorAvatar
+            doctor={doctor || undefined}
+            name={session.full_name}
+            size="lg"
+            showActiveBadge
+          />
+          <div>
+            <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
+              <Stethoscope className="w-4 h-4" />
+              <span>Doctor Practice Portal</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              {session.full_name}
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-slate-500">
+              {doctor?.specialization} • {doctor?.qualification}
+              {doctor?.consultation_fee ? ` • ${formatINR(doctor.consultation_fee)} / visit` : ""}
+            </p>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            {session.full_name}
-          </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            {doctor?.specialization} • {doctor?.qualification}
-          </p>
         </div>
 
         <div className="flex items-center gap-3">

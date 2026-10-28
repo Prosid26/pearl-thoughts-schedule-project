@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { AppointmentStatusBadge } from "@/components/appointments/AppointmentStatusBadge";
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
+import { formatINR } from "@/lib/utils/currency";
 import {
   Calendar,
   Clock,
@@ -121,16 +123,24 @@ export default async function PatientDashboardPage() {
             <AppointmentStatusBadge status={nextAppointment.status} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-            <div>
-              <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">
-                Doctor
-              </div>
-              <div className="text-lg font-bold text-white mt-0.5">
-                {nextAppointment.doctor?.user?.full_name || "Doctor"}
-              </div>
-              <div className="text-xs text-teal-300 font-medium">
-                {nextAppointment.doctor?.specialization}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2 items-center">
+            <div className="flex items-center gap-3">
+              <DoctorAvatar
+                avatarUrl={nextAppointment.doctor?.avatar_url}
+                specialization={nextAppointment.doctor?.specialization}
+                doctorName={nextAppointment.doctor?.user?.full_name}
+                size="md"
+              />
+              <div>
+                <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">
+                  Doctor
+                </div>
+                <div className="text-lg font-bold text-white mt-0.5">
+                  {nextAppointment.doctor?.user?.full_name || "Doctor"}
+                </div>
+                <div className="text-xs text-teal-300 font-medium">
+                  {nextAppointment.doctor?.specialization}
+                </div>
               </div>
             </div>
 
@@ -148,6 +158,11 @@ export default async function PatientDashboardPage() {
                 {nextAppointment.availability?.start_time.slice(0, 5)} -{" "}
                 {nextAppointment.availability?.end_time.slice(0, 5)}
               </div>
+              {nextAppointment.doctor?.consultation_fee && (
+                <div className="text-xs text-teal-300 font-semibold mt-0.5">
+                  Fee: {formatINR(nextAppointment.doctor.consultation_fee)}
+                </div>
+              )}
             </div>
 
             <div>
@@ -156,7 +171,7 @@ export default async function PatientDashboardPage() {
               </div>
               <div className="text-xs text-slate-200 mt-0.5 line-clamp-2">
                 {nextAppointment.doctor?.clinic_address ||
-                  "Main Medical Center, Boston"}
+                  "Apex Heart & Vascular Clinic, Link Road, Andheri West, Mumbai"}
               </div>
             </div>
           </div>

@@ -65,15 +65,20 @@ This application strictly implements the 5 core entities and relationships defin
 
 All demo accounts use the default password: **`Password123!`**
 
-| Role | Name | Email | Specialty / Description |
-| :--- | :--- | :--- | :--- |
-| **Patient** | John Doe | `patient@demo.com` | Sample patient with active cardiology booking |
-| **Patient** | Jane Smith | `jane@demo.com` | Sample patient |
-| **Doctor** | Dr. Sarah Jenkins | `doctor.sarah@demo.com` | Senior Cardiologist (Harvard Medical, 15 yrs) |
-| **Doctor** | Dr. Marcus Vance | `doctor.marcus@demo.com` | Chief of Dermatology (Johns Hopkins, 11 yrs) |
-| **Doctor** | Dr. Elena Rostova | `doctor.elena@demo.com` | Consultant Neurologist (Stanford, 18 yrs) |
-| **Doctor** | Dr. David Chen | `doctor.david@demo.com` | Pediatric Specialist (Columbia, 12 yrs) |
-| **Doctor** | Dr. Priya Sharma | `doctor.priya@demo.com` | Orthopedic Surgeon (AIIMS / Oxford, 14 yrs) |
+| Role | Name | Email | Specialty / Description | Consultation Fee |
+| :--- | :--- | :--- | :--- | :--- |
+| **Patient** | Aarav Sharma | `patient@demo.com` | Sample patient (Andheri West, Mumbai) | — |
+| **Patient** | Priya Verma | `jane@demo.com` | Sample patient (Bandra West, Mumbai) | — |
+| **Doctor** | Dr. Ananya Sharma | `doctor.ananya@demo.com` | Senior Cardiologist (AIIMS New Delhi, 14 yrs) | ₹1,000 |
+| **Doctor** | Dr. Priya Nair | `doctor.priya@demo.com` | Consultant Dermatologist (Grant Medical College, 11 yrs) | ₹800 |
+| **Doctor** | Dr. Rohan Iyer | `doctor.rohan@demo.com` | Senior Neurologist (NIMHANS Bengaluru, 16 yrs) | ₹1,200 |
+| **Doctor** | Dr. Sneha Kulkarni | `doctor.sneha@demo.com` | Pediatric Specialist (Wadia Children's Hospital, 12 yrs) | ₹700 |
+| **Doctor** | Dr. Rahul Mehta | `doctor.rahul@demo.com` | Orthopedic Surgeon (KEM Hospital Mumbai, 15 yrs) | ₹900 |
+| **Doctor** | Dr. Arjun Deshmukh | `doctor.arjun@demo.com` | General Physician (BJ Medical College Pune, 13 yrs) | ₹500 |
+| **Doctor** | Dr. Aditi Patel | `doctor.aditi@demo.com` | Consultant Gynecologist (LTMMC Sion, 10 yrs) | ₹800 |
+| **Doctor** | Dr. Karan Shah | `doctor.karan@demo.com` | Cosmetic Dentist & Implantologist (Nair Dental, 9 yrs) | ₹600 |
+
+*(Note: Legacy alias emails such as `doctor.sarah@demo.com`, `doctor.marcus@demo.com`, `doctor.elena@demo.com`, and `doctor.david@demo.com` automatically resolve to their corresponding doctors for backward compatibility.)*
 
 > 💡 **Tip:** Use the **"1-Click Demo Logins"** dropdown at the top-right of the application to switch accounts instantly without typing.
 

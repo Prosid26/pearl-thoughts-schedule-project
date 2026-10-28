@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
+import { formatINR } from "@/lib/utils/currency";
+
 export default async function DoctorDetailPage({
   params,
 }: {
@@ -23,18 +26,17 @@ export default async function DoctorDetailPage({
     notFound();
   }
 
-  const doctor = await db.getDoctorById(doctorId);
+  const [doctor, availabilities, session] = await Promise.all([
+    db.getDoctorById(doctorId),
+    db.getDoctorAvailability(doctorId),
+    getSession(),
+  ]);
+
   if (!doctor) {
     notFound();
   }
 
-  const availabilities = await db.getDoctorAvailability(doctorId);
-  const session = await getSession();
-
   const doctorName = doctor.user?.full_name || `Dr. ${doctor.specialization}`;
-  const avatar =
-    doctor.avatar_url ||
-    "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300";
 
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -54,10 +56,10 @@ export default async function DoctorDetailPage({
         <div className="lg:col-span-5 space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
             <div className="flex items-start gap-4">
-              <img
-                src={avatar}
-                alt={doctorName}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-slate-100 shadow-sm"
+              <DoctorAvatar
+                doctor={doctor}
+                size="xl"
+                showActiveBadge
               />
               <div className="flex-1 min-w-0">
                 <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 mb-1">
@@ -90,7 +92,7 @@ export default async function DoctorDetailPage({
                   Consultation Fee
                 </div>
                 <div className="text-lg font-black text-slate-900 mt-0.5">
-                  ${Number(doctor.consultation_fee).toFixed(0)}
+                  {formatINR(doctor.consultation_fee)}
                   <span className="text-xs font-normal text-slate-500"> / session</span>
                 </div>
               </div>

@@ -10,7 +10,10 @@ import {
   MapPin,
   ArrowRight,
   FileText,
+  IndianRupee,
 } from "lucide-react";
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
+import { formatINR } from "@/lib/utils/currency";
 
 export default async function BookingConfirmationPage({
   searchParams,
@@ -78,17 +81,24 @@ export default async function BookingConfirmationPage({
 
           {/* Consultation Summary Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Stethoscope className="w-3.5 h-3.5 text-teal-600" />
-                Doctor / Specialist
-              </span>
-              <div className="text-sm font-bold text-slate-900">{docName}</div>
-              {appointment?.doctor && (
-                <div className="text-xs text-teal-700 font-medium">
-                  {appointment.doctor.specialization}
-                </div>
-              )}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-start gap-3">
+              <DoctorAvatar
+                doctor={appointment?.doctor}
+                size="sm"
+                showActiveBadge
+              />
+              <div className="space-y-0.5 flex-1 min-w-0">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Stethoscope className="w-3.5 h-3.5 text-teal-600" />
+                  Doctor / Specialist
+                </span>
+                <div className="text-sm font-bold text-slate-900 truncate">{docName}</div>
+                {appointment?.doctor && (
+                  <div className="text-xs text-teal-700 font-medium">
+                    {appointment.doctor.specialization}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
@@ -103,6 +113,19 @@ export default async function BookingConfirmationPage({
               </div>
             </div>
           </div>
+
+          {/* Consultation Fee Badge */}
+          {appointment?.doctor?.consultation_fee && (
+            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex items-center justify-between text-xs text-emerald-950">
+              <span className="font-semibold flex items-center gap-1.5">
+                <IndianRupee className="w-4 h-4 text-emerald-700" />
+                <span>Consultation Fee (Pay at clinic / online):</span>
+              </span>
+              <span className="text-base font-extrabold text-emerald-800">
+                {formatINR(appointment.doctor.consultation_fee)}
+              </span>
+            </div>
+          )}
 
           {/* Reason for consultation */}
           {appointment?.reason && (

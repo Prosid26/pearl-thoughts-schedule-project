@@ -146,7 +146,7 @@ export function PatientProfileForm({ patient, user }: Props) {
               type="text"
               name="address"
               defaultValue={patient.address || ""}
-              placeholder="e.g. 742 Evergreen Terrace, Springfield"
+              placeholder="e.g. 204 Silver Arch, Lokhandwala, Andheri West, Mumbai"
               className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             />
           </div>

@@ -46,63 +46,90 @@ function generateInitialSeed(): DatabaseState {
   const users: User[] = [
     {
       user_id: 1,
-      full_name: "John Doe",
+      full_name: "Aarav Sharma",
       email: "patient@demo.com",
-      phone: "+1 (555) 234-5678",
+      phone: "+91 98200 11223",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "patient",
       created_at: new Date().toISOString(),
     },
     {
       user_id: 2,
-      full_name: "Jane Smith",
+      full_name: "Priya Verma",
       email: "jane@demo.com",
-      phone: "+1 (555) 876-5432",
+      phone: "+91 98200 44556",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "patient",
       created_at: new Date().toISOString(),
     },
     {
       user_id: 3,
-      full_name: "Dr. Sarah Jenkins",
-      email: "doctor.sarah@demo.com",
-      phone: "+1 (555) 901-2345",
+      full_name: "Dr. Ananya Sharma",
+      email: "doctor.ananya@demo.com",
+      phone: "+91 98201 23456",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "doctor",
       created_at: new Date().toISOString(),
     },
     {
       user_id: 4,
-      full_name: "Dr. Marcus Vance",
-      email: "doctor.marcus@demo.com",
-      phone: "+1 (555) 345-6789",
+      full_name: "Dr. Priya Nair",
+      email: "doctor.priya@demo.com",
+      phone: "+91 98202 34567",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "doctor",
       created_at: new Date().toISOString(),
     },
     {
       user_id: 5,
-      full_name: "Dr. Elena Rostova",
-      email: "doctor.elena@demo.com",
-      phone: "+1 (555) 456-7890",
+      full_name: "Dr. Rohan Iyer",
+      email: "doctor.rohan@demo.com",
+      phone: "+91 98203 45678",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "doctor",
       created_at: new Date().toISOString(),
     },
     {
       user_id: 6,
-      full_name: "Dr. David Chen",
-      email: "doctor.david@demo.com",
-      phone: "+1 (555) 567-8901",
+      full_name: "Dr. Sneha Kulkarni",
+      email: "doctor.sneha@demo.com",
+      phone: "+91 98204 56789",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "doctor",
       created_at: new Date().toISOString(),
     },
     {
       user_id: 7,
-      full_name: "Dr. Priya Sharma",
-      email: "doctor.priya@demo.com",
-      phone: "+1 (555) 678-9012",
+      full_name: "Dr. Rahul Mehta",
+      email: "doctor.rahul@demo.com",
+      phone: "+91 98205 67890",
+      password_hash: DEFAULT_PASSWORD_HASH,
+      role: "doctor",
+      created_at: new Date().toISOString(),
+    },
+    {
+      user_id: 8,
+      full_name: "Dr. Arjun Deshmukh",
+      email: "doctor.arjun@demo.com",
+      phone: "+91 98206 78901",
+      password_hash: DEFAULT_PASSWORD_HASH,
+      role: "doctor",
+      created_at: new Date().toISOString(),
+    },
+    {
+      user_id: 9,
+      full_name: "Dr. Aditi Patel",
+      email: "doctor.aditi@demo.com",
+      phone: "+91 98207 89012",
+      password_hash: DEFAULT_PASSWORD_HASH,
+      role: "doctor",
+      created_at: new Date().toISOString(),
+    },
+    {
+      user_id: 10,
+      full_name: "Dr. Karan Shah",
+      email: "doctor.karan@demo.com",
+      phone: "+91 98208 90123",
       password_hash: DEFAULT_PASSWORD_HASH,
       role: "doctor",
       created_at: new Date().toISOString(),
@@ -115,7 +142,7 @@ function generateInitialSeed(): DatabaseState {
       user_id: 1,
       date_of_birth: "1992-05-14",
       gender: "Male",
-      address: "742 Evergreen Terrace, Springfield, IL",
+      address: "204 Silver Arch, Lokhandwala Complex, Andheri West, Mumbai",
       created_at: new Date().toISOString(),
     },
     {
@@ -123,7 +150,7 @@ function generateInitialSeed(): DatabaseState {
       user_id: 2,
       date_of_birth: "1996-11-22",
       gender: "Female",
-      address: "128 Beacon St, Boston, MA",
+      address: "501 Sea View Apartments, Hill Road, Bandra West, Mumbai",
       created_at: new Date().toISOString(),
     },
   ];
@@ -133,66 +160,96 @@ function generateInitialSeed(): DatabaseState {
       doctor_id: 1,
       user_id: 3,
       specialization: "Cardiology",
-      qualification: "MBBS, MD, FACC (Harvard Medical School)",
-      experience_years: 15,
-      consultation_fee: 120.0,
-      bio: "Dr. Sarah Jenkins is an internationally recognized consultant cardiologist specializing in preventive cardiology, echocardiography, hypertension, and heart rhythm management.",
-      avatar_url:
-        "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300",
-      clinic_address: "Pearl Thought Heart Pavilion, Suite 402, Boston, MA",
+      qualification: "MBBS, MD (Medicine), DM (Cardiology - AIIMS New Delhi)",
+      experience_years: 14,
+      consultation_fee: 1000.0,
+      bio: "Dr. Ananya Sharma is a senior consultant cardiologist specializing in preventive cardiology, echocardiography, hypertension management, and heart rhythm disorders.",
+      avatar_url: null,
+      clinic_address: "Apex Heart & Vascular Clinic, Suite 402, Link Road, Andheri West, Mumbai",
       created_at: new Date().toISOString(),
     },
     {
       doctor_id: 2,
       user_id: 4,
       specialization: "Dermatology",
-      qualification: "MD Dermatology (Johns Hopkins University)",
+      qualification: "MBBS, MD (Dermatology, Venereology & Leprosy - Grant Medical College)",
       experience_years: 11,
-      consultation_fee: 95.0,
-      bio: "Dr. Marcus Vance provides comprehensive clinical and cosmetic dermatologic care. Specializing in eczema, psoriasis, acne management, and laser therapies.",
-      avatar_url:
-        "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=300",
-      clinic_address:
-        "Aesthetic & Clinical Derma Center, 5th Floor, New York, NY",
+      consultation_fee: 800.0,
+      bio: "Dr. Priya Nair provides expert medical and aesthetic dermatological care, focusing on chronic eczema, acne scar treatments, psoriasis, and pediatric skin conditions.",
+      avatar_url: null,
+      clinic_address: "Twacha Skin & Aesthetic Clinic, Hill Road, Bandra West, Mumbai",
       created_at: new Date().toISOString(),
     },
     {
       doctor_id: 3,
       user_id: 5,
       specialization: "Neurology",
-      qualification: "MD, PhD Neurology (Stanford University)",
-      experience_years: 18,
-      consultation_fee: 160.0,
-      bio: "Dr. Elena Rostova is a board-certified neurologist focusing on complex migraine syndromes, neuro-degenerative diseases, and sleep disorders.",
-      avatar_url:
-        "https://images.unsplash.com/photo-1594824813593-7859c7717462?auto=format&fit=crop&q=80&w=300",
-      clinic_address: "Stanford Neurocare Pavilion, Suite 12B, Palo Alto, CA",
+      qualification: "MBBS, MD (Medicine), DM (Neurology - NIMHANS Bengaluru)",
+      experience_years: 16,
+      consultation_fee: 1200.0,
+      bio: "Dr. Rohan Iyer is a senior consultant neurologist focusing on stroke rehabilitation, epilepsy management, migraine headaches, Parkinson's disease, and neurophysiology.",
+      avatar_url: null,
+      clinic_address: "Mind & Nerve Healthcare, Central Avenue, Hiranandani Gardens, Powai, Mumbai",
       created_at: new Date().toISOString(),
     },
     {
       doctor_id: 4,
       user_id: 6,
       specialization: "Pediatrics",
-      qualification: "MD, FAAP Pediatrics (Columbia University)",
+      qualification: "MBBS, DCH, DNB (Pediatrics - Bai Jerbai Wadia Hospital for Children)",
       experience_years: 12,
-      consultation_fee: 85.0,
-      bio: "Dr. David Chen is beloved for his gentle, attentive care with newborns, children, and adolescents. Specializing in childhood immunization and wellness.",
-      avatar_url:
-        "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=300",
-      clinic_address: "Columbia Children Wellness Clinic, Chicago, IL",
+      consultation_fee: 700.0,
+      bio: "Dr. Sneha Kulkarni is known for compassionate pediatric care, specializing in newborn care, developmental assessment, childhood vaccinations, and nutrition counseling.",
+      avatar_url: null,
+      clinic_address: "Vatsalya Children's Clinic, Gokhale Road, Dadar West, Mumbai",
       created_at: new Date().toISOString(),
     },
     {
       doctor_id: 5,
       user_id: 7,
       specialization: "Orthopedics",
-      qualification: "MBBS, MS Ortho, MCh (AIIMS & Oxford)",
-      experience_years: 14,
-      consultation_fee: 140.0,
-      bio: "Dr. Priya Sharma specializes in joint preservation, arthroscopic knee and shoulder reconstruction, and sports medicine rehabilitation for active adults.",
-      avatar_url:
-        "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?auto=format&fit=crop&q=80&w=300",
-      clinic_address: "Metropolitan Bone & Joint Center, Seattle, WA",
+      qualification: "MBBS, MS (Orthopedics - KEM Hospital Mumbai), Fellowship in Joint Replacement",
+      experience_years: 15,
+      consultation_fee: 900.0,
+      bio: "Dr. Rahul Mehta specializes in robotic joint replacement, arthroscopic knee and shoulder surgery, sports medicine, and complex fracture care.",
+      avatar_url: null,
+      clinic_address: "Mehta Bone & Joint Clinic, S.V. Road, Goregaon West, Mumbai",
+      created_at: new Date().toISOString(),
+    },
+    {
+      doctor_id: 6,
+      user_id: 8,
+      specialization: "General Medicine",
+      qualification: "MBBS, MD (General Medicine - B.J. Medical College Pune)",
+      experience_years: 13,
+      consultation_fee: 500.0,
+      bio: "Dr. Arjun Deshmukh is a trusted family physician with comprehensive expertise in diabetes management, infectious diseases, preventive health screenings, and geriatric care.",
+      avatar_url: null,
+      clinic_address: "Deshmukh Family Healthcare, Teen Hath Naka, Thane West, Maharashtra",
+      created_at: new Date().toISOString(),
+    },
+    {
+      doctor_id: 7,
+      user_id: 9,
+      specialization: "Gynecology",
+      qualification: "MBBS, MS (Obstetrics & Gynecology - Seth GS Medical College & KEM)",
+      experience_years: 10,
+      consultation_fee: 800.0,
+      bio: "Dr. Aditi Patel is a dedicated obstetrician and gynecologist specializing in high-risk pregnancy management, adolescent health, PCOS care, and minimally invasive laparoscopic surgeries.",
+      avatar_url: null,
+      clinic_address: "Matrutva Women's Care Clinic, Palm Beach Road, Sector 17, Vashi, Navi Mumbai, Maharashtra",
+      created_at: new Date().toISOString(),
+    },
+    {
+      doctor_id: 8,
+      user_id: 10,
+      specialization: "Dentistry",
+      qualification: "BDS, MDS (Prosthodontics & Implantology - Nair Hospital Dental College)",
+      experience_years: 9,
+      consultation_fee: 600.0,
+      bio: "Dr. Karan Shah provides high-precision cosmetic dentistry, dental implants, pain-free root canals, and orthodontic smile designs.",
+      avatar_url: null,
+      clinic_address: "Shah Dental Studio & Laser Clinic, FC Road, Shivajinagar, Pune, Maharashtra",
       created_at: new Date().toISOString(),
     },
   ];
@@ -203,7 +260,7 @@ function generateInitialSeed(): DatabaseState {
   const date4 = getFutureDate(4);
 
   const availability: Availability[] = [
-    // Dr. Sarah Jenkins (doctor_id 1)
+    // Dr. Ananya Sharma (doctor_id 1)
     {
       availability_id: 1,
       doctor_id: 1,
@@ -277,7 +334,7 @@ function generateInitialSeed(): DatabaseState {
       is_available: true,
     },
 
-    // Dr. Marcus Vance (doctor_id 2)
+    // Dr. Priya Nair (doctor_id 2)
     {
       availability_id: 9,
       doctor_id: 2,
@@ -306,7 +363,7 @@ function generateInitialSeed(): DatabaseState {
       is_available: true,
     },
 
-    // Dr. Elena Rostova (doctor_id 3)
+    // Dr. Rohan Iyer (doctor_id 3)
     {
       availability_id: 12,
       doctor_id: 3,
@@ -326,7 +383,7 @@ function generateInitialSeed(): DatabaseState {
       is_available: true,
     },
 
-    // Dr. David Chen (doctor_id 4)
+    // Dr. Sneha Kulkarni (doctor_id 4)
     {
       availability_id: 14,
       doctor_id: 4,
@@ -346,7 +403,7 @@ function generateInitialSeed(): DatabaseState {
       is_available: true,
     },
 
-    // Dr. Priya Sharma (doctor_id 5)
+    // Dr. Rahul Mehta (doctor_id 5)
     {
       availability_id: 16,
       doctor_id: 5,
@@ -374,6 +431,66 @@ function generateInitialSeed(): DatabaseState {
       slot_duration: 30,
       is_available: true,
     },
+
+    // Dr. Arjun Deshmukh (doctor_id 6)
+    {
+      availability_id: 19,
+      doctor_id: 6,
+      available_date: date1,
+      start_time: "09:00",
+      end_time: "09:30",
+      slot_duration: 30,
+      is_available: true,
+    },
+    {
+      availability_id: 20,
+      doctor_id: 6,
+      available_date: date2,
+      start_time: "11:00",
+      end_time: "11:30",
+      slot_duration: 30,
+      is_available: true,
+    },
+
+    // Dr. Aditi Patel (doctor_id 7)
+    {
+      availability_id: 21,
+      doctor_id: 7,
+      available_date: date1,
+      start_time: "10:30",
+      end_time: "11:00",
+      slot_duration: 30,
+      is_available: true,
+    },
+    {
+      availability_id: 22,
+      doctor_id: 7,
+      available_date: date2,
+      start_time: "14:30",
+      end_time: "15:00",
+      slot_duration: 30,
+      is_available: true,
+    },
+
+    // Dr. Karan Shah (doctor_id 8)
+    {
+      availability_id: 23,
+      doctor_id: 8,
+      available_date: date1,
+      start_time: "11:30",
+      end_time: "12:00",
+      slot_duration: 30,
+      is_available: true,
+    },
+    {
+      availability_id: 24,
+      doctor_id: 8,
+      available_date: date3,
+      start_time: "16:00",
+      end_time: "16:30",
+      slot_duration: 30,
+      is_available: true,
+    },
   ];
 
   const appointments: Appointment[] = [
@@ -384,7 +501,7 @@ function generateInitialSeed(): DatabaseState {
       availability_id: 3,
       appointment_date: `${date1}T10:00:00.000Z`,
       status: "confirmed",
-      reason: "Annual routine cardiac checkup and blood pressure review.",
+      reason: "Routine cardiac consultation and blood pressure evaluation.",
       created_at: new Date().toISOString(),
     },
   ];
@@ -396,10 +513,10 @@ function generateInitialSeed(): DatabaseState {
     availability,
     appointments,
     counters: {
-      userId: 7,
+      userId: 10,
       patientId: 2,
-      doctorId: 5,
-      availabilityId: 18,
+      doctorId: 8,
+      availabilityId: 24,
       appointmentId: 1,
     },
   };
@@ -459,9 +576,23 @@ class LocalDatabase {
 
   // --- User operations ---
   public getUserByEmail(email: string): User | undefined {
-    return this.state.users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase().trim()
+    const normalized = email.toLowerCase().trim();
+    const directMatch = this.state.users.find(
+      (u) => u.email.toLowerCase() === normalized
     );
+    if (directMatch) return directMatch;
+
+    const legacyAliases: Record<string, string> = {
+      "doctor.sarah@demo.com": "doctor.ananya@demo.com",
+      "doctor.marcus@demo.com": "doctor.priya@demo.com",
+      "doctor.elena@demo.com": "doctor.rohan@demo.com",
+      "doctor.david@demo.com": "doctor.sneha@demo.com",
+    };
+    const targetEmail = legacyAliases[normalized];
+    if (targetEmail) {
+      return this.state.users.find((u) => u.email.toLowerCase() === targetEmail);
+    }
+    return undefined;
   }
 
   public getUserById(userId: number): User | undefined {

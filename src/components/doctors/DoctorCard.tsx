@@ -9,6 +9,9 @@ import {
   ChevronRight,
 } from "lucide-react";
 
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
+import { formatINR } from "@/lib/utils/currency";
+
 interface DoctorCardProps {
   doctor: Doctor;
   availableSlotCount?: number;
@@ -16,22 +19,18 @@ interface DoctorCardProps {
 
 export function DoctorCard({ doctor, availableSlotCount }: DoctorCardProps) {
   const doctorName = doctor.user?.full_name || `Dr. ${doctor.specialization}`;
-  const avatar =
-    doctor.avatar_url ||
-    "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300";
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-teal-300 transition-all duration-200 overflow-hidden flex flex-col justify-between group">
       <div className="p-5 sm:p-6">
         {/* Header: Avatar, Name, Specialization */}
         <div className="flex items-start gap-4">
-          <div className="relative">
-            <img
-              src={avatar}
-              alt={doctorName}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border-2 border-slate-100 shadow-xs group-hover:scale-102 transition-transform"
+          <div className="group-hover:scale-102 transition-transform">
+            <DoctorAvatar
+              doctor={doctor}
+              size="lg"
+              showActiveBadge
             />
-            <span className="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-white w-4 h-4 rounded-full" title="Active Practitioner" />
           </div>
 
           <div className="flex-1 min-w-0">
@@ -60,7 +59,7 @@ export function DoctorCard({ doctor, availableSlotCount }: DoctorCardProps) {
               </span>
               <span className="text-slate-300">•</span>
               <span className="font-semibold text-slate-900">
-                ${Number(doctor.consultation_fee).toFixed(0)}
+                {formatINR(doctor.consultation_fee)}
                 <span className="text-[11px] font-normal text-slate-500"> / visit</span>
               </span>
             </div>

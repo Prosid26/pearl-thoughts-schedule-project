@@ -10,7 +10,10 @@ import {
   MapPin,
   XCircle,
   Loader2,
+  IndianRupee,
 } from "lucide-react";
+import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
+import { formatINR } from "@/lib/utils/currency";
 
 interface Props {
   initialAppointments: Appointment[];
@@ -144,16 +147,27 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-                      <Stethoscope className="w-5 h-5" />
-                    </div>
+                    <DoctorAvatar
+                      doctor={app.doctor}
+                      size="sm"
+                      showActiveBadge
+                    />
                     <div>
                       <div className="text-sm font-bold text-slate-900">
                         {app.doctor?.user?.full_name || "Doctor"}
                       </div>
-                      <div className="text-xs text-teal-700 font-medium">
-                        {app.doctor?.specialization} •{" "}
-                        {app.doctor?.qualification}
+                      <div className="text-xs text-teal-700 font-medium flex items-center gap-2">
+                        <span>
+                          {app.doctor?.specialization} • {app.doctor?.qualification}
+                        </span>
+                        {app.doctor?.consultation_fee && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="font-semibold text-slate-900">
+                              {formatINR(app.doctor.consultation_fee)}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
