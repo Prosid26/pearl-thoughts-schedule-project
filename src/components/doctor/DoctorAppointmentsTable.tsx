@@ -8,7 +8,9 @@ import {
   Calendar,
   Phone,
   Search,
+  Clock,
 } from "lucide-react";
+import { formatISTDate } from "@/lib/utils/date";
 
 interface Props {
   initialAppointments: Appointment[];
@@ -62,25 +64,25 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
   return (
     <div className="space-y-6">
       {/* Controls Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="clinic-card p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto text-xs">
           <button
             onClick={() => setActiveTab("all")}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+            className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
               activeTab === "all"
-                ? "bg-teal-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-forest text-ivory border border-forest"
+                : "text-ink-muted hover:text-ink hover:bg-ivory-light"
             }`}
           >
             All ({appointments.length})
           </button>
           <button
             onClick={() => setActiveTab("pending")}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+            className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
               activeTab === "pending"
-                ? "bg-teal-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-forest text-ivory border border-forest"
+                : "text-ink-muted hover:text-ink hover:bg-ivory-light"
             }`}
           >
             Pending (
@@ -88,10 +90,10 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
           </button>
           <button
             onClick={() => setActiveTab("confirmed")}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+            className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
               activeTab === "confirmed"
-                ? "bg-teal-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-forest text-ivory border border-forest"
+                : "text-ink-muted hover:text-ink hover:bg-ivory-light"
             }`}
           >
             Confirmed (
@@ -99,10 +101,10 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
           </button>
           <button
             onClick={() => setActiveTab("completed")}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+            className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
               activeTab === "completed"
-                ? "bg-teal-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-forest text-ivory border border-forest"
+                : "text-ink-muted hover:text-ink hover:bg-ivory-light"
             }`}
           >
             Completed (
@@ -110,13 +112,13 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
           </button>
           <button
             onClick={() => setActiveTab("cancelled")}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-colors ${
+            className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
               activeTab === "cancelled"
-                ? "bg-teal-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-forest text-ivory border border-forest"
+                : "text-ink-muted hover:text-ink hover:bg-ivory-light"
             }`}
           >
-            Cancelled / Declined (
+            Cancelled (
             {
               appointments.filter(
                 (a) => a.status === "cancelled" || a.status === "rejected"
@@ -128,53 +130,45 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
 
         {/* Search */}
         <div className="relative w-full md:w-64">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search patient or symptoms..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            placeholder="Search patient, phone, symptoms..."
+            className="w-full pl-9 pr-3 py-1.5 rounded-md border border-warm-border text-xs bg-white text-ink focus:outline-none focus:border-forest focus:ring-1 focus:ring-forest placeholder:text-ink-muted"
           />
         </div>
       </div>
 
       {/* Appointments Grid */}
       {filtered.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {filtered.map((app) => {
-            const dateStr = new Date(app.appointment_date).toLocaleDateString(
-              "en-US",
-              {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }
-            );
+            const dateStr = formatISTDate(app.appointment_date);
 
             return (
               <div
                 key={app.appointment_id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-slate-300 transition-all space-y-3"
+                className="clinic-card p-5 sm:p-6 space-y-3"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-sm shrink-0">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-lg bg-sage-light text-forest border border-sage-dark/60 flex items-center justify-center font-serif font-bold text-sm shrink-0">
                       {app.patient?.user?.full_name?.charAt(0) || "P"}
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <div className="font-serif text-base font-bold text-ink flex items-center gap-2">
                         <span>
                           {app.patient?.user?.full_name || "Patient Record"}
                         </span>
-                        <span className="text-[11px] font-mono text-slate-400 font-normal">
+                        <span className="text-[10px] font-mono text-ink-muted font-normal">
                           #APT-{String(app.appointment_id).padStart(5, "0")}
                         </span>
                       </div>
-                      <div className="text-xs text-slate-500 flex items-center gap-3 mt-0.5">
+                      <div className="text-xs text-ink-muted flex items-center gap-3 mt-0.5 font-sans">
                         <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-slate-400" />
+                          <Phone className="w-3 h-3 text-forest" />
                           <span>{app.patient?.user?.phone || "No phone"}</span>
                         </span>
                         <span>•</span>
@@ -196,17 +190,17 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 text-xs">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <Calendar className="w-4 h-4 text-teal-600 shrink-0" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-warm-border-subtle text-xs">
+                  <div className="flex items-center gap-2 text-ink font-semibold">
+                    <Calendar className="w-3.5 h-3.5 text-forest shrink-0" />
                     <span>
-                      {dateStr} @ {app.availability?.start_time.slice(0, 5)} -{" "}
-                      {app.availability?.end_time.slice(0, 5)}
+                      {dateStr} @ {app.availability?.start_time.slice(0, 5)} –{" "}
+                      {app.availability?.end_time.slice(0, 5)} IST
                     </span>
                   </div>
 
-                  <div className="text-slate-600 truncate">
-                    <strong>Reason:</strong> {app.reason}
+                  <div className="text-ink-muted truncate font-sans">
+                    <strong className="text-ink font-semibold">Clinical Note:</strong> {app.reason}
                   </div>
                 </div>
               </div>
@@ -214,12 +208,12 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
           })}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto space-y-3">
-          <Calendar className="w-10 h-10 text-slate-400 mx-auto" />
-          <h3 className="text-base font-bold text-slate-800">
-            No Appointments Found
+        <div className="clinic-card p-12 text-center max-w-md mx-auto space-y-3">
+          <Calendar className="w-8 h-8 text-ink-muted mx-auto" />
+          <h3 className="font-serif text-lg font-bold text-ink">
+            No consultations found
           </h3>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink-muted font-sans">
             There are no appointments matching the selected filter criteria.
           </p>
         </div>

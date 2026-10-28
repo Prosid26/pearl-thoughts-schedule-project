@@ -381,6 +381,12 @@ async function runTestSuite() {
   // TEST 16: No Eligible Patients Remaining -> Return to Normal Availability
   console.log("\nTEST 16: Fallback to Public Availability When No Patients Remain");
   const farFutureDate = "2099-12-31";
+  const existingFarFuture = localDb.getDoctorAvailability(targetDoctor.doctor_id).find(
+    (s) => s.available_date === farFutureDate && s.start_time === "18:00"
+  );
+  if (existingFarFuture) {
+    localDb.deleteAvailabilitySlot(existingFarFuture.availability_id, targetDoctor.doctor_id);
+  }
   const remainingSlot = localDb.addAvailabilitySlot(
     targetDoctor.doctor_id,
     farFutureDate,

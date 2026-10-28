@@ -10,12 +10,13 @@ import {
   Calendar,
   Clock,
   User,
-  Stethoscope,
-  ArrowRight,
   PlusCircle,
+  ArrowRight,
+  MapPin,
 } from "lucide-react";
 import { EarlySlotOfferBanner } from "@/components/patient/EarlySlotOfferBanner";
 import { PatientNotificationsPanel } from "@/components/patient/PatientNotificationsPanel";
+import { formatISTDate, formatTime12h } from "@/lib/utils/date";
 
 export default async function PatientDashboardPage() {
   const session = await getSession();
@@ -39,76 +40,76 @@ export default async function PatientDashboardPage() {
     upcomingAppointments.length > 0 ? upcomingAppointments[0] : null;
 
   return (
-    <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="py-10 sm:py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-warm-border">
         <div>
-          <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-            <User className="w-4 h-4" />
-            <span>Patient Portal</span>
+          <div className="inline-flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-wider mb-1">
+            <User className="w-3.5 h-3.5" />
+            <span>Patient Sanctuary</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            Welcome back, {session.full_name}
+          <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink tracking-tight">
+            Welcome, {session.full_name}
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            View your upcoming consultations, appointment history, and medical specialists.
+          <p className="mt-1 text-xs sm:text-sm text-ink-muted font-sans">
+            Review your clinical schedule, upcoming consultations, and expedited slot opportunities.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Link
             href="/doctors"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm shadow-teal-600/20"
+            className="btn-forest text-xs px-4 py-2.5 gap-2"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Book New Appointment</span>
+            <span>Book Consultation</span>
           </Link>
           <Link
             href="/patient/profile"
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+            className="btn-ivory text-xs px-4 py-2.5"
           >
             Edit Profile
           </Link>
         </div>
       </div>
 
-      {/* Active Early Slot Offer Banner with Live 2-Min Countdown */}
+      {/* Prominent Earlier-Slot Offer Banner with Live 2-Min Countdown */}
       <EarlySlotOfferBanner initialOffer={initialOffer} />
 
-      {/* Metric Cards */}
+      {/* Calm Architectural Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            Total Bookings
+        <div className="clinic-card p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+            Total Consultations
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-1">
+          <div className="font-serif text-2xl font-bold text-ink mt-1">
             {appointments.length}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-teal-600">
+        <div className="clinic-card p-5 border-l-4 border-l-forest">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-forest">
             Upcoming
           </div>
-          <div className="text-2xl font-black text-teal-700 mt-1">
+          <div className="font-serif text-2xl font-bold text-forest mt-1">
             {upcomingAppointments.length}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-            Completed
+        <div className="clinic-card p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+            Completed Visits
           </div>
-          <div className="text-2xl font-black text-emerald-700 mt-1">
+          <div className="font-serif text-2xl font-bold text-ink mt-1">
             {appointments.filter((a) => a.status === "completed").length}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="clinic-card p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">
             Cancelled
           </div>
-          <div className="text-2xl font-black text-slate-500 mt-1">
+          <div className="font-serif text-2xl font-bold text-ink-muted mt-1">
             {
               appointments.filter(
                 (a) => a.status === "cancelled" || a.status === "rejected"
@@ -118,160 +119,126 @@ export default async function PatientDashboardPage() {
         </div>
       </div>
 
-      {/* In-App Notifications Center */}
-      <PatientNotificationsPanel />
-
-      {/* Next Upcoming Appointment Highlight */}
-      {nextAppointment ? (
-        <div className="bg-gradient-to-r from-teal-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg space-y-4">
+      {/* Next Upcoming Consultation Highlight */}
+      {nextAppointment && (
+        <div className="bg-forest rounded-xl p-6 sm:p-7 text-ivory shadow-md space-y-4 border border-forest-dark">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-800/80 text-teal-200 border border-teal-700/60">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Next Scheduled Consultation</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-[#182821] text-sage border border-sage-dark/40">
+              <Clock className="w-3.5 h-3.5 text-terracotta" />
+              <span>Next Confirmed Visit</span>
             </span>
             <AppointmentStatusBadge status={nextAppointment.status} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2 items-center">
-            <div className="flex items-center gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2 items-center">
+            <div className="md:col-span-8 flex items-start gap-4">
               <DoctorAvatar
                 avatarUrl={nextAppointment.doctor?.avatar_url}
                 specialization={nextAppointment.doctor?.specialization}
                 doctorName={nextAppointment.doctor?.user?.full_name}
-                size="md"
+                size="lg"
               />
-              <div>
-                <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">
-                  Doctor
-                </div>
-                <div className="text-lg font-bold text-white mt-0.5">
+              <div className="space-y-1">
+                <h3 className="font-serif text-xl font-bold text-white">
                   {nextAppointment.doctor?.user?.full_name || "Doctor"}
+                </h3>
+                <p className="text-xs text-[#BAC8BF]">
+                  {nextAppointment.doctor?.specialization} • {nextAppointment.doctor?.qualification}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-sage pt-1">
+                  <Calendar className="w-3.5 h-3.5 text-terracotta" />
+                  <span>
+                    {formatISTDate(nextAppointment.appointment_date)} at{" "}
+                    {new Date(nextAppointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                  </span>
                 </div>
-                <div className="text-xs text-teal-300 font-medium">
-                  {nextAppointment.doctor?.specialization}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">
-                Date & Time
-              </div>
-              <div className="text-base font-bold text-white mt-0.5">
-                {new Date(nextAppointment.appointment_date).toLocaleDateString(
-                  "en-US",
-                  { weekday: "short", month: "short", day: "numeric" }
+                {nextAppointment.doctor?.clinic_address && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#BAC8BF] pt-0.5">
+                    <MapPin className="w-3 h-3 text-sage shrink-0" />
+                    <span>{nextAppointment.doctor.clinic_address}</span>
+                  </div>
                 )}
               </div>
-              <div className="text-xs text-slate-300">
-                {nextAppointment.availability?.start_time.slice(0, 5)} -{" "}
-                {nextAppointment.availability?.end_time.slice(0, 5)}
-              </div>
-              {nextAppointment.doctor?.consultation_fee && (
-                <div className="text-xs text-teal-300 font-semibold mt-0.5">
-                  Fee: {formatINR(nextAppointment.doctor.consultation_fee)}
-                </div>
-              )}
             </div>
 
-            <div>
-              <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">
-                Clinic Location
+            <div className="md:col-span-4 flex flex-col items-start md:items-end justify-center gap-2">
+              <div className="text-right">
+                <span className="text-[11px] text-sage block font-sans">Consultation Fee</span>
+                <span className="font-serif text-xl font-bold text-terracotta">
+                  {nextAppointment.doctor?.consultation_fee
+                    ? formatINR(nextAppointment.doctor.consultation_fee)
+                    : "Covered"}
+                </span>
               </div>
-              <div className="text-xs text-slate-200 mt-0.5 line-clamp-2">
-                {nextAppointment.doctor?.clinic_address ||
-                  "Apex Heart & Vascular Clinic, Link Road, Andheri West, Mumbai"}
-              </div>
+              <Link
+                href="/patient/appointments"
+                className="btn-terracotta text-xs px-4 py-2 gap-1 mt-1 font-bold"
+              >
+                <span>View Full Details</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </div>
-
-          <div className="pt-2 flex items-center justify-between border-t border-slate-800 text-xs">
-            <span className="text-slate-400">
-              Visit reason: <em>&ldquo;{nextAppointment.reason}&rdquo;</em>
-            </span>
-            <Link
-              href="/patient/appointments"
-              className="text-teal-400 hover:text-teal-300 font-bold flex items-center gap-1"
-            >
-              <span>Manage Booking</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3">
-          <Calendar className="w-10 h-10 text-slate-400 mx-auto" />
-          <h3 className="text-base font-bold text-slate-800">
-            No Upcoming Appointments
-          </h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            You do not have any pending or confirmed consultations. Select a medical specialist to book your next visit.
-          </p>
-          <Link
-            href="/doctors"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors"
-          >
-            <span>Explore Doctors</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
         </div>
       )}
 
-      {/* Recent Appointments Preview */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
-            Recent Appointments
-          </h2>
+      {/* Clinical In-App Notifications Center */}
+      <PatientNotificationsPanel />
+
+      {/* Upcoming Appointments Summary */}
+      <div className="clinic-card p-6 sm:p-7 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-warm-border">
+          <h3 className="font-serif text-lg font-bold text-ink">
+            Upcoming Consultations ({upcomingAppointments.length})
+          </h3>
           <Link
             href="/patient/appointments"
-            className="text-xs font-semibold text-teal-600 hover:text-teal-700"
+            className="text-xs font-bold text-forest hover:text-forest-dark uppercase tracking-wider"
           >
-            View All ({appointments.length}) →
+            All History →
           </Link>
         </div>
 
-        {appointments.length > 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden shadow-xs">
-            {appointments.slice(0, 4).map((app) => (
+        {upcomingAppointments.length > 0 ? (
+          <div className="divide-y divide-warm-border-subtle">
+            {upcomingAppointments.map((app) => (
               <div
                 key={app.appointment_id}
-                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors"
+                className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-                    <Stethoscope className="w-5 h-5" />
-                  </div>
+                <div className="flex items-center gap-3">
+                  <DoctorAvatar
+                    avatarUrl={app.doctor?.avatar_url}
+                    specialization={app.doctor?.specialization}
+                    doctorName={app.doctor?.user?.full_name}
+                    size="md"
+                  />
                   <div>
-                    <div className="text-sm font-bold text-slate-900">
+                    <h4 className="font-serif text-sm font-bold text-ink">
                       {app.doctor?.user?.full_name || "Doctor"}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {app.doctor?.specialization} •{" "}
-                      {new Date(app.appointment_date).toLocaleDateString(
-                        "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        }
-                      )}{" "}
-                      @ {app.availability?.start_time.slice(0, 5)}
-                    </div>
-                    <div className="text-xs text-slate-600 mt-1 line-clamp-1">
-                      Reason: {app.reason}
-                    </div>
+                    </h4>
+                    <p className="text-xs text-ink-muted font-sans">
+                      {app.doctor?.specialization}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end gap-3">
+                <div className="flex items-center gap-4 text-xs">
+                  <div className="text-ink-muted">
+                    <span className="font-medium text-ink">
+                      {formatISTDate(app.appointment_date)}
+                    </span>{" "}
+                    @ {new Date(app.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                  </div>
                   <AppointmentStatusBadge status={app.status} size="sm" />
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">No appointments recorded yet.</p>
+          <div className="py-6 text-center text-xs text-ink-muted font-sans">
+            No upcoming consultations booked at present.
+          </div>
         )}
       </div>
     </div>

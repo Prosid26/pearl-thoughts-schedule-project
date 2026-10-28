@@ -1,1 +1,124 @@
 @import "tailwindcss";
+
+@theme {
+  --color-ivory: #F5F2EA;
+  --color-ivory-light: #FAF8F5;
+  --color-ivory-muted: #EBE5D8;
+  --color-forest: #243B32;
+  --color-forest-dark: #192C25;
+  --color-forest-light: #325044;
+  --color-forest-subtle: #EDF3F0;
+  --color-sage: #DCE5D8;
+  --color-sage-light: #F0F4EE;
+  --color-sage-dark: #BAC8B6;
+  --color-terracotta: #E7C7A4;
+  --color-terracotta-dark: #B88A58;
+  --color-terracotta-light: #F8F1E7;
+  --color-ink: #252923;
+  --color-ink-muted: #777970;
+  --color-ink-light: #4A4D46;
+  --color-warm-border: #E2DED4;
+  --color-warm-border-strong: #CDC5B5;
+  --color-warm-border-subtle: #ECE8DF;
+
+  --font-serif: var(--font-serif), "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-sans), "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background-color: #F5F2EA;
+    color: #252923;
+  }
+
+  body {
+    background-color: #F5F2EA;
+    color: #252923;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background-color: #243B32;
+    color: #F5F2EA;
+  }
+}
+
+/* Custom architectural clinic design utilities */
+.clinic-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E2DED4;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(37, 41, 35, 0.04), 0 1px 2px -1px rgba(37, 41, 35, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.clinic-card:hover {
+  border-color: #CDC5B5;
+  box-shadow: 0 4px 12px 0 rgba(37, 41, 35, 0.06);
+}
+
+.clinic-card-subtle {
+  background-color: #FAF8F5;
+  border: 1px solid #ECE8DF;
+  border-radius: 0.75rem;
+}
+
+.btn-forest {
+  background-color: #243B32;
+  color: #F5F2EA;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-forest:hover {
+  background-color: #192C25;
+  color: #FFFFFF;
+}
+
+.btn-forest:focus-visible {
+  outline: 2px solid #243B32;
+  outline-offset: 2px;
+}
+
+.btn-ivory {
+  background-color: #FFFFFF;
+  color: #252923;
+  border: 1px solid #E2DED4;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-ivory:hover {
+  background-color: #FAF8F5;
+  border-color: #CDC5B5;
+}
+
+.btn-terracotta {
+  background-color: #E7C7A4;
+  color: #252923;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-terracotta:hover {
+  background-color: #DDB78F;
+}
+
+/* Subtle botanical motif watermark */
+.bg-clinic-grid {
+  background-image: radial-gradient(rgba(36, 59, 50, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

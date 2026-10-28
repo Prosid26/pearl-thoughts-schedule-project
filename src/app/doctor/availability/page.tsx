@@ -18,16 +18,16 @@ export default async function DoctorAvailabilityPage() {
 
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-      <div className="border-b border-slate-200 pb-6">
-        <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-          <Clock className="w-4 h-4" />
-          <span>Practice Calendar</span>
+      <div className="border-b border-warm-border pb-6">
+        <div className="flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-widest mb-1.5">
+          <Clock className="w-3.5 h-3.5" />
+          <span>Practice Operating Calendar</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          Manage Availability Slots
+        <h1 className="font-serif text-3xl sm:text-4xl font-normal text-ink tracking-tight">
+          Manage Availability Windows
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-slate-500">
-          Publish consultation dates and time intervals for patients to book in real-time.
+        <p className="mt-1.5 text-xs sm:text-sm text-muted-text">
+          Publish consultation dates and time intervals for patients to book with atomic concurrency safeguards.
         </p>
       </div>
 

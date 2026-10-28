@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Loader2,
   Save,
+  ShieldCheck,
 } from "lucide-react";
 
 interface Props {
@@ -34,7 +35,7 @@ export function PatientProfileForm({ patient, user }: Props) {
     const res = await updatePatientProfileAction(null, formData);
 
     if (res.success) {
-      setSuccessMessage("Your profile information has been updated successfully.");
+      setSuccessMessage("Your profile information has been securely updated.");
     } else {
       setErrorMessage(res.error || "Failed to update profile.");
     }
@@ -42,90 +43,95 @@ export function PatientProfileForm({ patient, user }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs max-w-2xl">
+    <form onSubmit={handleSubmit} className="space-y-6 clinic-card p-6 sm:p-8 max-w-2xl">
       {successMessage && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs text-emerald-800">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-3 bg-sage/40 border border-forest/20 rounded-xl flex items-center gap-2 text-xs text-forest">
+          <CheckCircle2 className="w-4 h-4 text-forest shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs text-rose-800">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+        <div className="p-3 bg-terracotta/20 border border-terracotta/40 rounded-xl flex items-center gap-2 text-xs text-ink">
+          <AlertCircle className="w-4 h-4 text-ink shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-sage/20 border border-warm-border text-xs text-forest">
+        <ShieldCheck className="w-4 h-4 text-forest shrink-0" />
+        <span>Your patient record is safeguarded under strict clinic privacy protocols.</span>
+      </div>
+
+      <div className="space-y-4 text-xs">
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">
+          <label className="font-semibold text-ink block mb-1.5">
             Full Name
           </label>
           <div className="relative">
-            <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <UserIcon className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               name="full_name"
               required
               defaultValue={user.full_name}
-              className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-warm-border text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest bg-ivory text-ink"
             />
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">
-            Registered Email (Fixed)
+          <label className="font-semibold text-ink block mb-1.5">
+            Registered Email (Primary Identity)
           </label>
           <input
             type="email"
             disabled
             value={user.email}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 text-xs sm:text-sm cursor-not-allowed"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-warm-border/60 bg-warm-border/30 text-muted-text text-xs sm:text-sm cursor-not-allowed font-mono"
           />
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">
-            Phone Number
+          <label className="font-semibold text-ink block mb-1.5">
+            Phone Number (For WhatsApp / SMS Triage Alerts)
           </label>
           <div className="relative">
-            <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Phone className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="tel"
               name="phone"
               required
               defaultValue={user.phone}
-              className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-warm-border text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest bg-ivory text-ink font-mono"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
+            <label className="font-semibold text-ink block mb-1.5">
               Date of Birth
             </label>
             <div className="relative">
-              <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Calendar className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="date"
                 name="date_of_birth"
                 defaultValue={patient.date_of_birth || ""}
-                className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-warm-border text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest bg-ivory text-ink"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              Gender
+            <label className="font-semibold text-ink block mb-1.5">
+              Gender Identity
             </label>
             <select
               name="gender"
               defaultValue={patient.gender || ""}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-warm-border text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest bg-ivory text-ink"
             >
               <option value="">Select Gender</option>
               <option value="Male">Male</option>
@@ -137,17 +143,17 @@ export function PatientProfileForm({ patient, user }: Props) {
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">
+          <label className="font-semibold text-ink block mb-1.5">
             Residential Address
           </label>
           <div className="relative">
-            <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <MapPin className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               name="address"
               defaultValue={patient.address || ""}
               placeholder="e.g. 204 Silver Arch, Lokhandwala, Andheri West, Mumbai"
-              className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-warm-border text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest bg-ivory text-ink"
             />
           </div>
         </div>
@@ -157,17 +163,17 @@ export function PatientProfileForm({ patient, user }: Props) {
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 transition-colors shadow-xs"
+          className="btn-forest inline-flex items-center gap-2 text-xs cursor-pointer"
         >
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Saving Changes...</span>
+              <span>Saving Updates...</span>
             </>
           ) : (
             <>
               <Save className="w-4 h-4" />
-              <span>Save Profile Updates</span>
+              <span>Save Patient Record</span>
             </>
           )}
         </button>

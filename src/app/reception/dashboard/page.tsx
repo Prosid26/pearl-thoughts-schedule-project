@@ -37,19 +37,19 @@ export default async function ReceptionDashboardPage() {
   ).length;
 
   return (
-    <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="py-10 sm:py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Welcome & Reception Actions Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-warm-border">
         <div>
-          <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-            <Building className="w-4 h-4" />
-            <span>Clinic Administration & Triage Desk</span>
+          <div className="inline-flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-wider mb-1">
+            <Building className="w-3.5 h-3.5 text-forest" />
+            <span>Clinic Front Desk & Triage Operations</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink tracking-tight">
             Reception & Smart Waiting Queue
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Logged in as <strong>{session.full_name}</strong> (Clinic Reception). Manage walk-in check-ins, queue status, and track early slot cascade offers.
+          <p className="mt-1 text-xs sm:text-sm text-ink-muted font-sans">
+            Staff Portal: <strong>{session.full_name}</strong>. Triage walk-in patients, manage clinic calling status, and monitor early-offer cascades.
           </p>
         </div>
 
@@ -58,42 +58,42 @@ export default async function ReceptionDashboardPage() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-amber-200 bg-amber-50/20 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
+        <div className="clinic-card p-5 border-l-4 border-l-terracotta">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink flex items-center gap-1.5 font-sans">
+            <Clock className="w-3.5 h-3.5 text-terracotta-dark" />
             Currently Waiting
           </div>
-          <div className="text-2xl font-black text-amber-900 mt-1">
+          <div className="font-serif text-2xl font-bold text-ink mt-1">
             {waitingCount}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-blue-200 bg-blue-50/20 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
-            <PhoneCall className="w-3.5 h-3.5" />
+        <div className="clinic-card p-5 border-l-4 border-l-sage-dark">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-forest flex items-center gap-1.5 font-sans">
+            <PhoneCall className="w-3.5 h-3.5 text-forest" />
             Patients Called
           </div>
-          <div className="text-2xl font-black text-blue-900 mt-1">
+          <div className="font-serif text-2xl font-bold text-forest mt-1">
             {calledCount}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-teal-200 bg-teal-50/20 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-teal-800 flex items-center gap-1.5">
-            <Stethoscope className="w-3.5 h-3.5" />
+        <div className="clinic-card p-5 border-l-4 border-l-forest">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-forest flex items-center gap-1.5 font-sans">
+            <Stethoscope className="w-3.5 h-3.5 text-forest" />
             In Consultation
           </div>
-          <div className="text-2xl font-black text-teal-900 mt-1">
+          <div className="font-serif text-2xl font-bold text-forest mt-1">
             {inConsultCount}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-emerald-200 bg-emerald-50/20 shadow-xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="clinic-card p-5 border-l-4 border-l-terracotta-dark">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink flex items-center gap-1.5 font-sans">
+            <Sparkles className="w-3.5 h-3.5 text-terracotta-dark" />
             Active Early Offers
           </div>
-          <div className="text-2xl font-black text-emerald-900 mt-1">
+          <div className="font-serif text-2xl font-bold text-ink mt-1">
             {activeOffersCount}
           </div>
         </div>

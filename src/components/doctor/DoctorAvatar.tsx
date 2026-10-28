@@ -265,7 +265,7 @@ export function DoctorAvatar({
         <img
           src={fallbackSvgPath}
           alt={alt || `${doctorName} Silhouette`}
-          className="w-full h-full object-cover rounded-[inherit] border border-teal-100/80 shadow-xs"
+          className="w-full h-full object-cover rounded-[inherit] border border-warm-border/60 shadow-xs"
         />
       )}
 

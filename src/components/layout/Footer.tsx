@@ -1,143 +1,152 @@
 import React from "react";
 import Link from "next/link";
-import { Stethoscope, ShieldCheck, Heart, Database, Calendar } from "lucide-react";
+import { ShieldCheck, Database, Calendar, Clock, MapPin } from "lucide-react";
 
 export function Footer() {
   return (
-    <footer className="bg-slate-900 text-slate-300 border-t border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand & Mission */}
-          <div className="space-y-4 md:col-span-1">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white font-bold">
-                <Stethoscope className="w-4 h-4" />
+    <footer className="bg-[#1C2C25] text-ivory border-t border-[#2D3E35]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
+          {/* Brand & Editorial Mission */}
+          <div className="md:col-span-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-sage text-forest flex items-center justify-center font-bold">
+                <svg
+                  className="w-5 h-5 text-forest"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 4v16M4 12h16" />
+                  <circle cx="12" cy="12" r="3" className="opacity-40" />
+                </svg>
               </div>
-              <span className="font-bold text-white text-lg tracking-tight">
-                Pearl<span className="text-teal-400">Thoughts</span>
+              <span className="font-serif font-bold text-white text-2xl tracking-tight">
+                Medrella
               </span>
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Medrella-inspired modern doctor appointment booking and scheduling
-              platform built for the Pearl Thoughts Fullstack Internship.
+
+            <p className="text-xs text-[#BAC8BF] leading-relaxed max-w-sm">
+              The Modern Private Clinic. Engineered for punctuality, clinical
+              distinction, and patient peace of mind. Non-overlapping atomic
+              appointments, real-time triage, and expedited care cascades.
             </p>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>ACID Safe • Zero Overlap Bookings</span>
+
+            <div className="pt-2 flex items-center gap-2 text-xs text-sage">
+              <ShieldCheck className="w-4 h-4 text-terracotta" />
+              <span>ACID Guaranteed • Zero Double Booking</span>
             </div>
           </div>
 
-          {/* Patient Quick Links */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-100 mb-3">
-              Patient Services
+          {/* Clinical Hours & Locations */}
+          <div className="md:col-span-3 space-y-3 text-xs text-[#BAC8BF]">
+            <h4 className="font-serif font-semibold text-white text-sm tracking-wide">
+              Clinic Hours & Practice
             </h4>
-            <ul className="space-y-2 text-xs">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-white font-medium">
+                <Clock className="w-3.5 h-3.5 text-terracotta" />
+                <span>Monday – Saturday: 08:00 – 20:00 IST</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-sage" />
+                <span>Apex Health Tower, Link Road, Mumbai</span>
+              </div>
+              <p className="text-[11px] text-[#8EA094] pt-1">
+                Emergency admissions triage is active 24/7 through accredited
+                partner facilities.
+              </p>
+            </div>
+          </div>
+
+          {/* Patient Services */}
+          <div className="md:col-span-2 space-y-3">
+            <h4 className="font-serif font-semibold text-white text-sm tracking-wide">
+              Patient Care
+            </h4>
+            <ul className="space-y-2 text-xs text-[#BAC8BF]">
               <li>
                 <Link
                   href="/doctors"
-                  className="hover:text-teal-400 transition-colors"
+                  className="hover:text-terracotta transition-colors"
                 >
-                  Browse Specialists
+                  Medical Specialists
                 </Link>
               </li>
               <li>
                 <Link
                   href="/auth/register-patient"
-                  className="hover:text-teal-400 transition-colors"
+                  className="hover:text-terracotta transition-colors"
                 >
-                  Create Patient Account
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/patient/appointments"
-                  className="hover:text-teal-400 transition-colors"
-                >
-                  My Appointments
+                  Register Account
                 </Link>
               </li>
               <li>
                 <Link
                   href="/patient/dashboard"
-                  className="hover:text-teal-400 transition-colors"
+                  className="hover:text-terracotta transition-colors"
                 >
-                  Patient Portal
+                  Patient Sanctuary
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/patient/appointments"
+                  className="hover:text-terracotta transition-colors"
+                >
+                  Consultation History
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Doctor Portal */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-100 mb-3">
-              Practitioners & Clinics
+          {/* Practitioner & Operations */}
+          <div className="md:col-span-3 space-y-3">
+            <h4 className="font-serif font-semibold text-white text-sm tracking-wide">
+              Clinical Workspace
             </h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2 text-xs text-[#BAC8BF]">
               <li>
                 <Link
                   href="/doctor/dashboard"
-                  className="hover:text-teal-400 transition-colors"
+                  className="hover:text-terracotta transition-colors"
                 >
-                  Doctor Dashboard
+                  Physician Schedule & Triage
                 </Link>
               </li>
               <li>
                 <Link
                   href="/doctor/availability"
-                  className="hover:text-teal-400 transition-colors"
+                  className="hover:text-terracotta transition-colors"
                 >
-                  Manage Availability Slots
+                  Availability Slot Manager
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/auth/provision-doctor"
-                  className="hover:text-teal-400 transition-colors"
+                  href="/reception/dashboard"
+                  className="hover:text-terracotta transition-colors"
                 >
-                  Doctor Provisioning
+                  Reception & Walk-in Queue
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/auth/sign-in"
-                  className="hover:text-teal-400 transition-colors"
-                >
-                  Practitioner Login
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Architecture & Stack */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-100 mb-3">
-              Stack Architecture
-            </h4>
-            <ul className="space-y-2 text-xs text-slate-400">
-              <li className="flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-teal-400" />
-                <span>Supabase PostgreSQL + Local Store</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-teal-400" />
-                <span>Atomic Slot Locking Mechanism</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
-                <span>HTTP-Only JWT Cookie Sessions</span>
-              </li>
-              <li className="pt-2 text-[11px] text-slate-500">
-                Matches repository ER diagram specification exactly.
+              <li className="pt-2 text-[11px] text-[#8EA094] flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-sage" />
+                <span>Neon Cloud PostgreSQL • Drizzle ORM</span>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-          <p>© {new Date().getFullYear()} Pearl Thoughts Schedule Project. All rights reserved.</p>
-          <p className="flex items-center gap-1">
-            Engineered with <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /> for Pearl Thoughts Fullstack Assignment
+        <div className="mt-12 pt-6 border-t border-[#2D3E35] flex flex-col sm:flex-row items-center justify-between text-xs text-[#8EA094] gap-4">
+          <p>© {new Date().getFullYear()} Medrella Healthcare. All rights reserved.</p>
+          <p className="flex items-center gap-1 text-[11px]">
+            <span>Pearl Thoughts Fullstack Project</span>
+            <span>•</span>
+            <span className="text-sage">The Modern Private Clinic</span>
           </p>
         </div>
       </div>

@@ -13,39 +13,39 @@ export function AppointmentStatusBadge({ status, size = "md" }: Props) {
     { label: string; bg: string; text: string; border: string; icon: React.ReactNode }
   > = {
     pending: {
-      label: "Pending Confirmation",
-      bg: "bg-amber-50",
-      text: "text-amber-700",
-      border: "border-amber-200",
-      icon: <Clock className={size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5"} />,
+      label: "Pending Action",
+      bg: "bg-terracotta-light",
+      text: "text-ink font-semibold",
+      border: "border-terracotta",
+      icon: <Clock className={size === "sm" ? "w-3 h-3 text-terracotta-dark" : "w-3.5 h-3.5 text-terracotta-dark"} />,
     },
     confirmed: {
       label: "Confirmed",
-      bg: "bg-emerald-50",
-      text: "text-emerald-700",
-      border: "border-emerald-200",
-      icon: <CheckCircle2 className={size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5"} />,
+      bg: "bg-sage-light",
+      text: "text-forest font-bold",
+      border: "border-sage-dark/70",
+      icon: <CheckCircle2 className={size === "sm" ? "w-3 h-3 text-forest" : "w-3.5 h-3.5 text-forest"} />,
     },
     completed: {
       label: "Completed",
-      bg: "bg-blue-50",
-      text: "text-blue-700",
-      border: "border-blue-200",
-      icon: <CheckCheck className={size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5"} />,
+      bg: "bg-forest",
+      text: "text-ivory font-bold",
+      border: "border-forest-dark",
+      icon: <CheckCheck className={size === "sm" ? "w-3 h-3 text-sage" : "w-3.5 h-3.5 text-sage"} />,
     },
     cancelled: {
       label: "Cancelled",
-      bg: "bg-slate-100",
-      text: "text-slate-600",
-      border: "border-slate-200",
-      icon: <XCircle className={size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5"} />,
+      bg: "bg-ivory-muted",
+      text: "text-ink-muted font-medium",
+      border: "border-warm-border",
+      icon: <XCircle className={size === "sm" ? "w-3 h-3 text-ink-muted" : "w-3.5 h-3.5 text-ink-muted"} />,
     },
     rejected: {
       label: "Declined",
       bg: "bg-rose-50",
-      text: "text-rose-700",
+      text: "text-rose-800 font-medium",
       border: "border-rose-200",
-      icon: <AlertCircle className={size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5"} />,
+      icon: <AlertCircle className={size === "sm" ? "w-3 h-3 text-rose-700" : "w-3.5 h-3.5 text-rose-700"} />,
     },
   };
 
@@ -53,8 +53,8 @@ export function AppointmentStatusBadge({ status, size = "md" }: Props) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full border ${c.bg} ${c.text} ${c.border} ${
-        size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-xs"
+      className={`inline-flex items-center gap-1.5 rounded-md border ${c.bg} ${c.text} ${c.border} ${
+        size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
       }`}
     >
       {c.icon}

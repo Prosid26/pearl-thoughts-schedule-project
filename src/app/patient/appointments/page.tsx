@@ -19,26 +19,26 @@ export default async function PatientAppointmentsPage() {
 
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-warm-border">
         <div>
-          <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-            <Calendar className="w-4 h-4" />
-            <span>Consultation Schedule</span>
+          <div className="flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-widest mb-1.5">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Consultation Archive & Schedule</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="font-serif text-3xl sm:text-4xl font-normal text-ink tracking-tight">
             My Appointments
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Track status, review booking details, or cancel eligible appointments.
+          <p className="mt-1.5 text-xs sm:text-sm text-muted-text">
+            Track consultation stages, review doctor details, or cancel eligible bookings.
           </p>
         </div>
 
         <Link
           href="/doctors"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs"
+          className="btn-forest inline-flex items-center gap-2 text-xs"
         >
           <PlusCircle className="w-4 h-4" />
-          <span>Book Consultation</span>
+          <span>Book New Consultation</span>
         </Link>
       </div>
 

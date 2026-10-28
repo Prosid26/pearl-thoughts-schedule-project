@@ -5,12 +5,11 @@ import { Appointment } from "@/types/database";
 import { completeConsultationAction } from "@/app/actions/early-appointment.actions";
 import {
   CheckCircle2,
-  Clock,
   Sparkles,
   AlertTriangle,
   Loader2,
   X,
-  Stethoscope,
+  Clock,
 } from "lucide-react";
 import { formatTime12h } from "@/lib/utils/date";
 
@@ -40,7 +39,7 @@ export function CompleteConsultationModal({
     if (res.success && res.data) {
       onSuccess({
         earlySlotOffered: res.data.earlySlotOffered,
-        message: res.message || "Consultation completed.",
+        message: res.message || "Consultation concluded successfully.",
       });
       onClose();
     } else {
@@ -50,25 +49,25 @@ export function CompleteConsultationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-warm-border overflow-hidden">
         {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-teal-700 to-slate-900 text-white flex items-center justify-between">
+        <div className="p-6 bg-forest text-ivory flex items-center justify-between border-b border-forest-dark">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-600/50 flex items-center justify-center text-teal-200 border border-teal-500/40">
-              <CheckCircle2 className="w-5 h-5 text-teal-300" />
+            <div className="w-10 h-10 rounded-lg bg-[#182821] text-sage flex items-center justify-center border border-sage-dark/40 font-bold">
+              <CheckCircle2 className="w-5 h-5 text-sage" />
             </div>
             <div>
-              <h3 className="text-base font-bold">Complete Consultation</h3>
-              <p className="text-xs text-teal-200">
-                Finish active visit & check for early slot availability
+              <h3 className="font-serif text-lg font-bold text-white">Conclude Consultation</h3>
+              <p className="text-xs text-sage font-sans">
+                Mark visit completed & initiate earlier slot cascade
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             disabled={loading}
-            className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded-md text-sage hover:text-white hover:bg-forest-light transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -77,87 +76,87 @@ export function CompleteConsultationModal({
         {/* Content */}
         <div className="p-6 space-y-5">
           {error && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+            <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Current Appointment Summary */}
-          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2 text-xs">
+          <div className="bg-ivory-light rounded-lg p-4 border border-warm-border space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">
-                Patient Details
+              <span className="font-bold text-ink-muted uppercase tracking-wider text-[10px]">
+                Patient Record
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px]">
-                Active Visit
+              <span className="px-2 py-0.5 rounded-md bg-sage-light text-forest border border-sage-dark/60 font-semibold text-[10px]">
+                Active Consultation
               </span>
             </div>
-            <div className="text-sm font-bold text-slate-900">
+            <div className="font-serif text-base font-bold text-ink">
               {appointment.patient?.user?.full_name || "Patient"}
             </div>
-            <div className="text-slate-600 flex items-center gap-3">
+            <div className="text-ink-muted flex items-center gap-3">
               <span>📞 {appointment.patient?.user?.phone || "N/A"}</span>
               <span>
                 ⏰ Slot:{" "}
                 {appointment.availability
-                  ? `${formatTime12h(appointment.availability.start_time)} - ${formatTime12h(
+                  ? `${formatTime12h(appointment.availability.start_time)} – ${formatTime12h(
                       appointment.availability.end_time
                     )}`
                   : "Scheduled Slot"}
               </span>
             </div>
-            <div className="text-slate-500 italic pt-1 border-t border-slate-200">
-              Reason: &ldquo;{appointment.reason}&rdquo;
-            </div>
+            {appointment.reason && (
+              <div className="text-ink-muted italic pt-1 border-t border-warm-border-subtle font-sans">
+                Clinical Reason: &ldquo;{appointment.reason}&rdquo;
+              </div>
+            )}
           </div>
 
           {/* Smart Early Slot Explanation Box */}
-          <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2">
-            <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Smart Waiting Queue & Early Offer Integration</span>
+          <div className="p-4 rounded-lg bg-sage-light border border-sage-dark/70 space-y-2 text-forest">
+            <div className="flex items-center gap-2 font-bold text-xs">
+              <Sparkles className="w-4 h-4 text-forest" />
+              <span>Smart Waiting Queue & Early Offer Cascade</span>
             </div>
-            <p className="text-[11px] text-emerald-800 leading-relaxed">
-              When you complete this appointment early, Medrella will automatically
-              detect if an upcoming slot can accommodate another patient sooner. If
-              available, an early-offer notification with a 2-minute response
-              countdown will be dispatched to the next eligible patient in line.
+            <p className="text-[11px] text-forest/90 leading-relaxed font-sans">
+              When concluding this appointment ahead of time, Medrella automatically
+              identifies if upcoming slots can accommodate waiting clinic patients or
+              the next scheduled patient. An early-slot offer with a 2-minute response
+              window will be dispatched automatically.
             </p>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Are you sure you want to conclude this consultation? This will mark
-            the appointment as <strong>Completed</strong>.
+          <div className="text-xs text-ink-muted font-sans">
+            Confirm to mark this visit as <strong>Completed</strong>. Your schedule will be refreshed immediately.
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+        <div className="p-4 bg-ivory-light border-t border-warm-border flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/60 transition-colors"
+            className="btn-ivory text-xs px-4 py-2"
           >
             Cancel
           </button>
-
           <button
             type="button"
             onClick={handleComplete}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm shadow-teal-700/20"
+            className="btn-forest text-xs px-5 py-2.5 font-bold flex items-center gap-2 shadow-xs"
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Completing Consultation...</span>
+                <Loader2 className="w-4 h-4 animate-spin text-ivory" />
+                <span>Concluding Visit...</span>
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Confirm & Complete Consultation</span>
+                <CheckCircle2 className="w-4 h-4 text-sage" />
+                <span>Conclude Consultation</span>
               </>
             )}
           </button>

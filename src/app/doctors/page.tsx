@@ -4,9 +4,9 @@ import { DoctorDirectoryClient } from "@/components/doctors/DoctorDirectoryClien
 import { Stethoscope } from "lucide-react";
 
 export const metadata = {
-  title: "Find Doctors & Specialists | Pearl Thoughts Schedule",
+  title: "Clinical Specialists & Available Slots | Medrella",
   description:
-    "Browse verified healthcare specialists, view qualifications, fees, and reserve live appointments instantly.",
+    "Browse verified healthcare specialists, view medical qualifications, consultation fees, and reserve live appointments instantly.",
 };
 
 export default async function DoctorsPage() {
@@ -18,18 +18,19 @@ export default async function DoctorsPage() {
   ).sort();
 
   return (
-    <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="py-10 sm:py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Page Header */}
-      <div className="border-b border-slate-200 pb-6">
-        <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-          <Stethoscope className="w-4 h-4" />
-          <span>Practitioner Directory</span>
+      <div className="border-b border-warm-border pb-6 space-y-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-sage-light text-forest text-xs font-semibold border border-sage-dark/60">
+          <Stethoscope className="w-3.5 h-3.5 text-forest" />
+          <span>Practitioner Roster • Medrella Medical Wing</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          Find Top Medical Specialists
+        <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink tracking-tight">
+          Consult With Senior Specialists
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-slate-600 max-w-2xl">
-          Search qualified physicians, explore real-time availability slots, and book your consultation in seconds.
+        <p className="text-xs sm:text-sm text-ink-muted max-w-2xl font-sans leading-relaxed">
+          Browse verified Indian practitioners, explore authentic clinic hours, and reserve
+          guaranteed non-conflicting consultation slots.
         </p>
       </div>
 

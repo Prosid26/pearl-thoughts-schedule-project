@@ -23,16 +23,16 @@ export default async function PatientProfilePage() {
 
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-      <div className="border-b border-slate-200 pb-6">
-        <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-          <User className="w-4 h-4" />
+      <div className="border-b border-warm-border pb-6">
+        <div className="flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-widest mb-1.5">
+          <User className="w-3.5 h-3.5" />
           <span>Patient Account</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="font-serif text-3xl sm:text-4xl font-normal text-ink tracking-tight">
           Personal Information
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-slate-500">
-          Manage your personal identity, contact numbers, and home address.
+        <p className="mt-1.5 text-xs sm:text-sm text-muted-text">
+          Manage your personal identity, contact numbers, and address on file with Medrella.
         </p>
       </div>
 

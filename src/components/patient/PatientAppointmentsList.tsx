@@ -6,14 +6,14 @@ import { AppointmentStatusBadge } from "@/components/appointments/AppointmentSta
 import { cancelAppointmentAction } from "@/app/actions/appointment.actions";
 import {
   Calendar,
-  Stethoscope,
+  Clock,
   MapPin,
   XCircle,
   Loader2,
-  IndianRupee,
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
+import { formatISTDate } from "@/lib/utils/date";
 
 interface Props {
   initialAppointments: Appointment[];
@@ -65,13 +65,13 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
   return (
     <div className="space-y-6">
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto text-xs">
+      <div className="flex items-center gap-2 border-b border-warm-border pb-3 overflow-x-auto text-xs">
         <button
           onClick={() => setActiveTab("all")}
-          className={`px-3.5 py-1.5 rounded-lg font-bold transition-colors ${
+          className={`px-3.5 py-1.5 rounded-md font-semibold transition-colors ${
             activeTab === "all"
-              ? "bg-teal-600 text-white shadow-xs"
-              : "text-slate-600 hover:bg-slate-100"
+              ? "bg-forest text-ivory border border-forest"
+              : "text-ink-muted hover:text-ink hover:bg-ivory-light border border-transparent"
           }`}
         >
           All ({appointments.length})
@@ -79,10 +79,10 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
 
         <button
           onClick={() => setActiveTab("upcoming")}
-          className={`px-3.5 py-1.5 rounded-lg font-bold transition-colors ${
+          className={`px-3.5 py-1.5 rounded-md font-semibold transition-colors ${
             activeTab === "upcoming"
-              ? "bg-teal-600 text-white shadow-xs"
-              : "text-slate-600 hover:bg-slate-100"
+              ? "bg-forest text-ivory border border-forest"
+              : "text-ink-muted hover:text-ink hover:bg-ivory-light border border-transparent"
           }`}
         >
           Upcoming (
@@ -96,10 +96,10 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
 
         <button
           onClick={() => setActiveTab("completed")}
-          className={`px-3.5 py-1.5 rounded-lg font-bold transition-colors ${
+          className={`px-3.5 py-1.5 rounded-md font-semibold transition-colors ${
             activeTab === "completed"
-              ? "bg-teal-600 text-white shadow-xs"
-              : "text-slate-600 hover:bg-slate-100"
+              ? "bg-forest text-ivory border border-forest"
+              : "text-ink-muted hover:text-ink hover:bg-ivory-light border border-transparent"
           }`}
         >
           Completed (
@@ -108,10 +108,10 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
 
         <button
           onClick={() => setActiveTab("cancelled")}
-          className={`px-3.5 py-1.5 rounded-lg font-bold transition-colors ${
+          className={`px-3.5 py-1.5 rounded-md font-semibold transition-colors ${
             activeTab === "cancelled"
-              ? "bg-teal-600 text-white shadow-xs"
-              : "text-slate-600 hover:bg-slate-100"
+              ? "bg-forest text-ivory border border-forest"
+              : "text-ink-muted hover:text-ink hover:bg-ivory-light border border-transparent"
           }`}
         >
           Cancelled / Declined (
@@ -130,116 +130,103 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
           {filtered.map((app) => {
             const isCancellable =
               app.status === "pending" || app.status === "confirmed";
-            const dateStr = new Date(app.appointment_date).toLocaleDateString(
-              "en-US",
+            const dateStr = formatISTDate(app.appointment_date);
+            const timeStr = new Date(app.appointment_date).toLocaleTimeString(
+              [],
               {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
               }
             );
 
             return (
               <div
                 key={app.appointment_id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs hover:border-slate-300 transition-all space-y-4"
+                className="clinic-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <DoctorAvatar
-                      doctor={app.doctor}
-                      size="sm"
-                      showActiveBadge
-                    />
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
+                <div className="flex items-start gap-4">
+                  <DoctorAvatar
+                    avatarUrl={app.doctor?.avatar_url}
+                    specialization={app.doctor?.specialization}
+                    doctorName={app.doctor?.user?.full_name}
+                    size="lg"
+                  />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5">
+                      <h4 className="font-serif text-lg font-bold text-ink">
                         {app.doctor?.user?.full_name || "Doctor"}
+                      </h4>
+                      <AppointmentStatusBadge status={app.status} size="sm" />
+                    </div>
+
+                    <p className="text-xs text-ink-muted font-sans">
+                      {app.doctor?.specialization} • {app.doctor?.qualification}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-ink-muted pt-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-ink">
+                        <Calendar className="w-3.5 h-3.5 text-forest" />
+                        <span>{dateStr}</span>
                       </div>
-                      <div className="text-xs text-teal-700 font-medium flex items-center gap-2">
-                        <span>
-                          {app.doctor?.specialization} • {app.doctor?.qualification}
+                      <div className="flex items-center gap-1 text-ink-muted">
+                        <Clock className="w-3.5 h-3.5 text-forest" />
+                        <span>{timeStr} IST</span>
+                      </div>
+                      {app.doctor?.consultation_fee && (
+                        <span className="font-serif font-bold text-forest text-xs">
+                          {formatINR(app.doctor.consultation_fee)}
                         </span>
-                        {app.doctor?.consultation_fee && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span className="font-semibold text-slate-900">
-                              {formatINR(app.doctor.consultation_fee)}
-                            </span>
-                          </>
-                        )}
+                      )}
+                    </div>
+
+                    {app.reason && (
+                      <p className="text-xs text-ink-muted font-sans pt-1">
+                        <span className="font-semibold text-ink">Notes:</span> {app.reason}
+                      </p>
+                    )}
+
+                    {app.doctor?.clinic_address && (
+                      <div className="flex items-center gap-1 text-[11px] text-ink-muted pt-0.5">
+                        <MapPin className="w-3 h-3 text-forest shrink-0" />
+                        <span>{app.doctor.clinic_address}</span>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] font-mono font-semibold text-slate-400">
-                      #APT-{String(app.appointment_id).padStart(5, "0")}
-                    </span>
-                    <AppointmentStatusBadge status={app.status} />
+                    )}
                   </div>
                 </div>
 
-                {/* Details Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <Calendar className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>
-                      {dateStr} @ {app.availability?.start_time.slice(0, 5)} -{" "}
-                      {app.availability?.end_time.slice(0, 5)}
-                    </span>
-                  </div>
-
-                  {app.doctor?.clinic_address && (
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className="truncate">{app.doctor.clinic_address}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Visit Reason */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-xs text-slate-700 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                    Reason for visit
-                  </span>
-                  <p>{app.reason}</p>
-                </div>
-
-                {/* Actions */}
-                {isCancellable && (
-                  <div className="pt-2 flex justify-end">
+                <div className="flex items-center gap-3 self-end md:self-center border-t md:border-t-0 pt-3 md:pt-0 w-full md:w-auto justify-end">
+                  {isCancellable && (
                     <button
-                      onClick={() => handleCancel(app.appointment_id)}
                       disabled={cancellingId === app.appointment_id}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 transition-colors"
+                      onClick={() => handleCancel(app.appointment_id)}
+                      className="text-xs font-semibold text-rose-800 hover:text-rose-900 border border-rose-200 bg-rose-50/70 hover:bg-rose-100 px-3.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5"
                     >
                       {cancellingId === app.appointment_id ? (
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Cancelling Booking...</span>
+                          <span>Cancelling...</span>
                         </>
                       ) : (
                         <>
                           <XCircle className="w-3.5 h-3.5" />
-                          <span>Cancel Appointment</span>
+                          <span>Cancel Booking</span>
                         </>
                       )}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto space-y-3">
-          <Calendar className="w-10 h-10 text-slate-400 mx-auto" />
-          <h3 className="text-base font-bold text-slate-800">
-            No Appointments Found
-          </h3>
-          <p className="text-xs text-slate-500">
-            There are no appointments matching this status filter.
+        <div className="clinic-card p-12 text-center max-w-md mx-auto space-y-3">
+          <Calendar className="w-8 h-8 text-ink-muted mx-auto" />
+          <h4 className="font-serif text-lg font-bold text-ink">
+            No consultations found
+          </h4>
+          <p className="text-xs text-ink-muted font-sans">
+            You do not have any appointments under this category.
           </p>
         </div>
       )}

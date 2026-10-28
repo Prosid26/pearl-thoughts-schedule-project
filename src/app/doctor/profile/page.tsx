@@ -23,16 +23,16 @@ export default async function DoctorProfilePage() {
 
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-      <div className="border-b border-slate-200 pb-6">
-        <div className="flex items-center gap-2 text-teal-600 text-xs font-semibold uppercase tracking-wider mb-1">
-          <Stethoscope className="w-4 h-4" />
-          <span>Practitioner Settings</span>
+      <div className="border-b border-warm-border pb-6">
+        <div className="flex items-center gap-2 text-forest text-xs font-semibold uppercase tracking-widest mb-1.5">
+          <Stethoscope className="w-3.5 h-3.5" />
+          <span>Practitioner Registry</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          Doctor Profile Details
+        <h1 className="font-serif text-3xl sm:text-4xl font-normal text-ink tracking-tight">
+          Practitioner Credentials & Practice Details
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-slate-500">
-          Update medical qualifications, consultation fees, bio, and clinic location.
+        <p className="mt-1.5 text-xs sm:text-sm text-muted-text">
+          Keep your medical qualifications, clinic address, bio, and INR consultation fees accurate for patient booking.
         </p>
       </div>
 

@@ -51,12 +51,12 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlotId) {
-      setErrorMessage("Please select a time slot.");
+      setErrorMessage("Please select an available consultation time slot.");
       return;
     }
     if (!reason.trim() || reason.trim().length < 5) {
       setErrorMessage(
-        "Please provide a reason for the consultation (min 5 characters)."
+        "Please provide clinical context or symptoms for your consultation (min 5 characters)."
       );
       return;
     }
@@ -92,44 +92,49 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-teal-800 to-teal-700 text-white">
+    <div className="clinic-card overflow-hidden">
+      {/* Header */}
+      <div className="p-6 sm:p-7 bg-forest text-ivory border-b border-forest-dark">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold tracking-wider uppercase text-teal-200">
-              Online Appointment Schedule
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-sage">
+              Live Clinical Scheduling
             </span>
-            <h2 className="text-xl font-bold mt-0.5">Select Date & Time Slot</h2>
+            <h2 className="font-serif text-xl sm:text-2xl font-bold mt-0.5 text-white">
+              Reserve Consultation Slot
+            </h2>
           </div>
           <div className="text-right">
-            <span className="text-xs text-teal-200 block">Consultation Fee</span>
-            <span className="text-2xl font-extrabold text-white">
+            <span className="text-[11px] text-sage block font-sans">
+              Consultation Fee
+            </span>
+            <span className="font-serif text-2xl font-bold text-terracotta">
               {formatINR(doctor.consultation_fee)}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-6 sm:p-7 space-y-6">
         {/* Step 1: Select Date */}
         <div>
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-3 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-teal-600" />
+          <label className="text-xs font-bold text-ink uppercase tracking-wider block mb-3 flex items-center gap-1.5 font-sans">
+            <Calendar className="w-4 h-4 text-forest" />
             1. Select Consultation Date
           </label>
 
           {dates.length === 0 ? (
-            <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center">
-              <Calendar className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-700">
+            <div className="p-6 bg-ivory-light border border-warm-border rounded-lg text-center space-y-1.5">
+              <Calendar className="w-7 h-7 text-ink-muted mx-auto" />
+              <p className="text-sm font-semibold text-ink">
                 No active availability slots configured yet.
               </p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-ink-muted">
                 Please check back later or view other doctors in our directory.
               </p>
             </div>
           ) : (
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
               {dates.map((d) => {
                 const dateObj = new Date(d + "T00:00:00");
                 const dayName = dateObj.toLocaleDateString("en-US", {
@@ -150,20 +155,22 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                       setSelectedSlotId(null);
                       setErrorMessage(null);
                     }}
-                    className={`flex-shrink-0 px-4 py-3 rounded-xl border text-center transition-all ${
+                    className={`flex-shrink-0 px-4 py-3 rounded-lg border text-center transition-all ${
                       isSelected
-                        ? "bg-teal-600 border-teal-600 text-white shadow-md shadow-teal-600/20"
-                        : "bg-white border-slate-200 text-slate-700 hover:border-teal-300 hover:bg-slate-50"
+                        ? "bg-forest border-forest text-ivory shadow-xs"
+                        : "bg-white border-warm-border text-ink hover:border-forest-light hover:bg-ivory-light"
                     }`}
                   >
                     <div
-                      className={`text-[11px] font-semibold uppercase ${
-                        isSelected ? "text-teal-100" : "text-slate-400"
+                      className={`text-[10px] font-bold uppercase tracking-wider ${
+                        isSelected ? "text-sage" : "text-ink-muted"
                       }`}
                     >
                       {dayName}
                     </div>
-                    <div className="text-sm font-bold mt-0.5">{dayNum}</div>
+                    <div className="font-serif text-sm font-bold mt-0.5">
+                      {dayNum}
+                    </div>
                   </button>
                 );
               })}
@@ -173,15 +180,15 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
 
         {/* Step 2: Time Slots */}
         {selectedDate && (
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-3 flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-teal-600" />
+          <div className="pt-6 border-t border-warm-border-subtle">
+            <label className="text-xs font-bold text-ink uppercase tracking-wider block mb-3 flex items-center gap-1.5 font-sans">
+              <Clock className="w-4 h-4 text-forest" />
               2. Available Time Slots for {selectedDate}
             </label>
 
             {slotsForDate.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                No slots open for this date.
+              <p className="text-xs text-ink-muted">
+                No consultation slots open on this date.
               </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
@@ -198,28 +205,27 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                         setSelectedSlotId(slot.availability_id);
                         setErrorMessage(null);
                       }}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                      className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
                         !isAvailable
-                          ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed line-through"
+                          ? "bg-ivory-muted border-warm-border/50 text-ink-muted cursor-not-allowed line-through"
                           : isSelected
-                          ? "bg-teal-700 border-teal-700 text-white ring-2 ring-teal-500 ring-offset-1 shadow-sm"
-                          : "bg-white border-slate-200 text-slate-800 hover:border-teal-400 hover:bg-teal-50/50"
+                          ? "bg-forest border-forest text-ivory ring-2 ring-forest ring-offset-1 shadow-2xs"
+                          : "bg-white border-warm-border text-ink hover:border-forest hover:bg-ivory-light"
                       }`}
                     >
-                      <span>
-                        {slot.start_time.slice(0, 5)} -{" "}
-                        {slot.end_time.slice(0, 5)}
+                      <span className="font-sans font-medium">
+                        {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
                       </span>
                       <span
-                        className={`text-[10px] font-normal ${
+                        className={`text-[10px] ${
                           !isAvailable
-                            ? "text-slate-400"
+                            ? "text-ink-muted"
                             : isSelected
-                            ? "text-teal-100"
-                            : "text-emerald-600"
+                            ? "text-sage font-bold"
+                            : "text-forest font-semibold"
                         }`}
                       >
-                        {isAvailable ? "Available" : "Booked"}
+                        {isAvailable ? "Open" : "Booked"}
                       </span>
                     </button>
                   );
@@ -233,15 +239,15 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
         {selectedSlot && (
           <form
             onSubmit={handleBooking}
-            className="mt-6 pt-6 border-t border-slate-100 space-y-4 animate-in fade-in duration-200"
+            className="pt-6 border-t border-warm-border-subtle space-y-4 animate-in fade-in duration-200"
           >
             <div>
               <label
                 htmlFor="reason"
-                className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5"
+                className="text-xs font-bold text-ink uppercase tracking-wider block mb-1.5 flex items-center gap-1.5 font-sans"
               >
-                <HeartPulse className="w-4 h-4 text-teal-600" />
-                3. Reason for Consultation & Symptoms *
+                <HeartPulse className="w-4 h-4 text-forest" />
+                3. Primary Consultation Reason / Symptoms *
               </label>
               <textarea
                 id="reason"
@@ -250,13 +256,13 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. Follow-up consultation for blood pressure management, mild dizziness, or annual cardiac screening."
-                className="w-full px-3.5 py-2.5 text-xs text-slate-800 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 placeholder:text-slate-400"
+                className="w-full px-3.5 py-2.5 text-xs text-ink bg-white border border-warm-border rounded-lg focus:outline-none focus:border-forest focus:ring-1 focus:ring-forest placeholder:text-ink-muted"
               />
             </div>
 
             {/* Error Message banner */}
             {errorMessage && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-700">
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-800">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div>{errorMessage}</div>
               </div>
@@ -266,32 +272,31 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
             {session ? (
               session.role === "patient" ? (
                 <div className="space-y-3 pt-2">
-                  <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between text-xs text-teal-900">
+                  <div className="p-3.5 bg-sage-light border border-sage-dark/60 rounded-lg flex items-center justify-between text-xs text-forest">
                     <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-teal-600" />
+                      <User className="w-4 h-4 text-forest" />
                       <span>
-                        Booking as: <strong>{session.full_name}</strong>
+                        Patient: <strong>{session.full_name}</strong>
                       </span>
                     </div>
-                    <span className="font-semibold text-emerald-700">
-                      Slot: {selectedSlot.available_date} @{" "}
-                      {selectedSlot.start_time.slice(0, 5)}
+                    <span className="font-semibold text-forest">
+                      Slot: {selectedSlot.available_date} @ {selectedSlot.start_time.slice(0, 5)}
                     </span>
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 transition-colors shadow-md shadow-teal-600/20 flex items-center justify-center gap-2"
+                    className="btn-forest w-full py-3.5 text-sm font-bold shadow-sm flex items-center justify-center gap-2"
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin text-ivory" />
                         <span>Securing Slot Atomically...</span>
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4" />
+                        <CheckCircle2 className="w-4 h-4 text-sage" />
                         <span>
                           Confirm Appointment ({formatINR(doctor.consultation_fee)})
                         </span>
@@ -300,38 +305,38 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                   </button>
                 </div>
               ) : (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-2">
-                  <p className="font-semibold flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                <div className="p-4 bg-terracotta-light border border-terracotta rounded-lg text-xs text-ink space-y-1.5">
+                  <p className="font-bold flex items-center gap-1.5 text-forest">
+                    <AlertCircle className="w-4 h-4 text-terracotta-dark" />
                     Doctor Account Active
                   </p>
-                  <p>
-                    You are currently signed in as a Doctor. To test the patient
-                    booking experience, switch to a demo patient account using the
-                    dropdown at top right.
+                  <p className="text-ink-muted leading-relaxed">
+                    You are currently signed in with a Practitioner account. To test
+                    the patient reservation workflow, switch to a patient account using
+                    the Demo Switchboard at top right.
                   </p>
                 </div>
               )
             ) : (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                <div className="flex items-center gap-2 text-xs text-slate-700 font-semibold">
-                  <Lock className="w-4 h-4 text-teal-600" />
+              <div className="p-4 bg-ivory-light border border-warm-border rounded-lg space-y-3">
+                <div className="flex items-center gap-2 text-xs text-ink font-semibold">
+                  <Lock className="w-4 h-4 text-forest" />
                   <span>Sign in required to confirm appointment</span>
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-ink-muted">
                   Please sign in or use a 1-click evaluation demo patient to book
-                  this appointment.
+                  this consultation.
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <Link
                     href={`/auth/sign-in?redirect=/doctors/${doctor.doctor_id}`}
-                    className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors"
+                    className="btn-forest text-xs px-4 py-2"
                   >
                     Sign In
                   </Link>
                   <Link
                     href={`/auth/register-patient?redirect=/doctors/${doctor.doctor_id}`}
-                    className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+                    className="btn-ivory text-xs px-4 py-2"
                   >
                     Register Patient
                   </Link>
@@ -342,10 +347,10 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
         )}
       </div>
 
-      <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center gap-2 text-[11px] text-slate-500">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+      <div className="px-6 py-3.5 bg-ivory-light border-t border-warm-border flex items-center gap-2 text-xs text-ink-muted">
+        <ShieldCheck className="w-4 h-4 text-forest" />
         <span>
-          Instant atomic slot lock guarantees no double bookings or overlaps.
+          Instant atomic slot locking guarantees zero double bookings or schedule collisions.
         </span>
       </div>
     </div>

@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
-  Stethoscope,
   LogOut,
   Menu,
   X,
   LayoutDashboard,
   Clock,
+  Sparkles,
+  Building,
 } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth.actions";
 import { DemoSwitcher } from "./DemoSwitcher";
@@ -32,44 +33,56 @@ export function Navbar({ session, dbMode }: NavbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200">
+    <header className="sticky top-0 z-40 bg-ivory/95 backdrop-blur-md border-b border-warm-border transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
+        <div className="flex items-center justify-between h-17">
+          {/* Logo & Clinical Brandmark */}
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-700 to-teal-500 flex items-center justify-center text-white shadow-md shadow-teal-700/20 group-hover:scale-105 transition-transform">
-                <Stethoscope className="w-5 h-5" />
+            <Link href="/" className="flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-lg bg-forest flex items-center justify-center text-ivory shadow-xs group-hover:bg-forest-dark transition-all">
+                {/* Custom restrained botanical clinical cross */}
+                <svg
+                  className="w-5 h-5 text-ivory"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 4v16M4 12h16" />
+                  <circle cx="12" cy="12" r="3" className="opacity-40" />
+                </svg>
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-slate-900 tracking-tight leading-none text-lg">
-                  Pearl<span className="text-teal-600">Thoughts</span>
+                <span className="font-serif font-bold text-ink tracking-tight leading-none text-xl group-hover:text-forest transition-colors">
+                  Medrella
                 </span>
-                <span className="text-[11px] font-medium text-slate-400 tracking-wider uppercase">
-                  Schedule System
+                <span className="text-[10px] font-semibold text-ink-muted tracking-wider uppercase mt-0.5">
+                  The Modern Private Clinic
                 </span>
               </div>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-6">
+            <nav className="hidden md:flex items-center gap-7">
               <Link
                 href="/doctors"
-                className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors"
+                className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-forest transition-colors"
               >
-                Find Doctors
+                Specialists & Slots
               </Link>
               <Link
-                href="/#how-it-works"
-                className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors"
+                href="/#clinic-model"
+                className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-forest transition-colors"
               >
-                How It Works
+                The Clinic Model
               </Link>
               <Link
-                href="/#er-diagram"
-                className="text-sm font-medium text-slate-600 hover:text-teal-700 transition-colors"
+                href="/#queue-preview"
+                className="text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-forest transition-colors"
               >
-                ER Architecture
+                Smart Waiting Queue
               </Link>
             </nav>
           </div>
@@ -78,13 +91,7 @@ export function Navbar({ session, dbMode }: NavbarProps) {
           <div className="hidden md:flex items-center gap-3">
             {/* Database indicator badge */}
             <div
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
-                dbMode === "neon"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : dbMode === "supabase"
-                  ? "bg-teal-50 text-teal-800 border-teal-200"
-                  : "bg-slate-50 text-slate-700 border-slate-200"
-              }`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-sage-light text-forest border border-sage-dark/60"
               title={
                 dbMode === "neon"
                   ? "Connected to Neon PostgreSQL cloud instance (Drizzle ORM)"
@@ -93,21 +100,13 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                   : "Running on embedded ACID database store (Drizzle/Neon ready)."
               }
             >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  dbMode === "neon"
-                    ? "bg-emerald-500"
-                    : dbMode === "supabase"
-                    ? "bg-teal-500"
-                    : "bg-emerald-600"
-                } animate-pulse`}
-              />
+              <span className="w-1.5 h-1.5 rounded-full bg-forest animate-pulse" />
               <span>
                 {dbMode === "neon"
-                  ? "Neon PostgreSQL (Drizzle)"
+                  ? "Neon PostgreSQL • ACID"
                   : dbMode === "supabase"
                   ? "Supabase PostgreSQL"
-                  : "Database: Active (ACID)"}
+                  : "Database: Active"}
               </span>
             </div>
 
@@ -116,63 +115,63 @@ export function Navbar({ session, dbMode }: NavbarProps) {
 
             {/* User Session Buttons */}
             {session ? (
-              <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div className="flex items-center gap-2 pl-2 border-l border-warm-border">
                 {session.role === "doctor" ? (
                   <>
                     <Link
                       href="/doctor/dashboard"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-xs"
+                      className="btn-forest text-xs px-3 py-1.5 gap-1.5"
                     >
                       <LayoutDashboard className="w-3.5 h-3.5" />
-                      Doctor Dashboard
+                      <span>Doctor Workspace</span>
                     </Link>
                     <Link
                       href="/doctor/availability"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                      className="btn-ivory text-xs px-3 py-1.5 gap-1.5"
                     >
                       <Clock className="w-3.5 h-3.5" />
-                      Manage Slots
+                      <span>Manage Slots</span>
                     </Link>
                   </>
                 ) : session.role === "admin" ? (
                   <Link
                     href="/reception/dashboard"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-xs"
+                    className="btn-forest text-xs px-3.5 py-1.5 gap-1.5"
                   >
-                    <LayoutDashboard className="w-3.5 h-3.5" />
-                    Reception Queue
+                    <Building className="w-3.5 h-3.5" />
+                    <span>Reception Queue</span>
                   </Link>
                 ) : (
                   <>
                     <Link
                       href="/patient/dashboard"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-xs"
+                      className="btn-forest text-xs px-3 py-1.5 gap-1.5"
                     >
                       <LayoutDashboard className="w-3.5 h-3.5" />
-                      Patient Portal
+                      <span>Patient Portal</span>
                     </Link>
                     <Link
                       href="/patient/appointments"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                      className="btn-ivory text-xs px-3 py-1.5 gap-1.5"
                     >
                       <Calendar className="w-3.5 h-3.5" />
-                      My Appointments
+                      <span>My Visits</span>
                     </Link>
                   </>
                 )}
 
-                <div className="flex items-center gap-2 ml-1 pl-2 border-l border-slate-200">
+                <div className="flex items-center gap-2 ml-1 pl-2 border-l border-warm-border">
                   <div className="text-right">
-                    <div className="text-xs font-bold text-slate-800 leading-tight">
+                    <div className="text-xs font-bold text-ink leading-tight truncate max-w-[120px]">
                       {session.full_name}
                     </div>
-                    <div className="text-[10px] text-teal-600 font-medium capitalize">
+                    <div className="text-[10px] text-forest font-semibold capitalize">
                       {session.role}
                     </div>
                   </div>
                   <button
                     onClick={handleSignOut}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-ivory-muted transition-colors"
                     title="Sign Out"
                   >
                     <LogOut className="w-4 h-4" />
@@ -180,18 +179,18 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div className="flex items-center gap-2 pl-2 border-l border-warm-border">
                 <Link
                   href="/auth/sign-in"
-                  className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-teal-700 rounded-lg hover:bg-slate-100 transition-colors"
+                  className="btn-ivory text-xs px-3.5 py-1.5"
                 >
                   Sign In
                 </Link>
                 <Link
-                  href="/auth/register-patient"
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-xs"
+                  href="/doctors"
+                  className="btn-forest text-xs px-4 py-1.5"
                 >
-                  Book Appointment
+                  Book Consultation
                 </Link>
               </div>
             )}
@@ -202,12 +201,13 @@ export function Navbar({ session, dbMode }: NavbarProps) {
             <DemoSwitcher />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+              className="p-2 rounded-md text-ink hover:bg-ivory-muted"
+              aria-label="Toggle Navigation Menu"
             >
               {mobileMenuOpen ? (
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               ) : (
-                <Menu className="w-6 h-6" />
+                <Menu className="w-5 h-5" />
               )}
             </button>
           </div>
@@ -215,41 +215,47 @@ export function Navbar({ session, dbMode }: NavbarProps) {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-slate-200 space-y-3">
+          <div className="md:hidden py-4 border-t border-warm-border space-y-3 animate-in fade-in">
             <Link
               href="/doctors"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-slate-700 rounded-lg hover:bg-slate-100"
+              className="block px-3 py-2 text-sm font-semibold text-ink rounded-md hover:bg-ivory-muted"
             >
-              Find Doctors
+              Specialists & Slots
             </Link>
             <Link
-              href="/#how-it-works"
+              href="/#clinic-model"
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 text-sm font-medium text-slate-700 rounded-lg hover:bg-slate-100"
+              className="block px-3 py-2 text-sm font-semibold text-ink rounded-md hover:bg-ivory-muted"
             >
-              How It Works
+              The Clinic Model
+            </Link>
+            <Link
+              href="/#queue-preview"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 text-sm font-semibold text-ink rounded-md hover:bg-ivory-muted"
+            >
+              Smart Waiting Queue
             </Link>
 
             {session ? (
-              <div className="pt-3 border-t border-slate-200 space-y-2">
-                <div className="px-3 py-1 text-xs text-slate-500">
-                  Signed in as <strong>{session.full_name}</strong> (
-                  {session.role})
+              <div className="pt-3 border-t border-warm-border space-y-2">
+                <div className="px-3 py-1 text-xs text-ink-muted">
+                  Signed in as <strong>{session.full_name}</strong> ({session.role})
                 </div>
                 {session.role === "doctor" ? (
                   <>
                     <Link
                       href="/doctor/dashboard"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-3 py-2 text-sm font-semibold text-teal-700 rounded-lg bg-teal-50"
+                      className="block px-3 py-2 text-sm font-semibold text-forest rounded-md bg-sage-light"
                     >
-                      Doctor Dashboard
+                      Doctor Workspace
                     </Link>
                     <Link
                       href="/doctor/availability"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-3 py-2 text-sm font-semibold text-slate-700 rounded-lg hover:bg-slate-100"
+                      className="block px-3 py-2 text-sm font-medium text-ink rounded-md hover:bg-ivory-muted"
                     >
                       Manage Availability Slots
                     </Link>
@@ -258,7 +264,7 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                   <Link
                     href="/reception/dashboard"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 text-sm font-semibold text-teal-700 rounded-lg bg-teal-50"
+                    className="block px-3 py-2 text-sm font-semibold text-forest rounded-md bg-sage-light"
                   >
                     Reception Queue
                   </Link>
@@ -267,16 +273,16 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                     <Link
                       href="/patient/dashboard"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-3 py-2 text-sm font-semibold text-teal-700 rounded-lg bg-teal-50"
+                      className="block px-3 py-2 text-sm font-semibold text-forest rounded-md bg-sage-light"
                     >
                       Patient Portal
                     </Link>
                     <Link
                       href="/patient/appointments"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-3 py-2 text-sm font-semibold text-slate-700 rounded-lg hover:bg-slate-100"
+                      className="block px-3 py-2 text-sm font-medium text-ink rounded-md hover:bg-ivory-muted"
                     >
-                      My Appointments
+                      My Visits
                     </Link>
                   </>
                 )}
@@ -285,26 +291,26 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                     setMobileMenuOpen(false);
                     handleSignOut();
                   }}
-                  className="w-full text-left px-3 py-2 text-sm font-semibold text-rose-600 rounded-lg hover:bg-rose-50"
+                  className="w-full text-left px-3 py-2 text-sm font-semibold text-ink-muted hover:text-forest rounded-md hover:bg-ivory-muted"
                 >
                   Sign Out
                 </button>
               </div>
             ) : (
-              <div className="pt-3 border-t border-slate-200 flex flex-col gap-2">
+              <div className="pt-3 border-t border-warm-border flex flex-col gap-2">
                 <Link
                   href="/auth/sign-in"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full py-2 text-center text-sm font-semibold text-slate-700 border border-slate-300 rounded-lg"
+                  className="w-full py-2.5 text-center text-sm font-semibold text-ink bg-white border border-warm-border rounded-md"
                 >
                   Sign In
                 </Link>
                 <Link
-                  href="/auth/register-patient"
+                  href="/doctors"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full py-2 text-center text-sm font-semibold text-white bg-teal-600 rounded-lg"
+                  className="w-full py-2.5 text-center text-sm font-bold text-ivory bg-forest rounded-md"
                 >
-                  Register as Patient
+                  Book Consultation
                 </Link>
               </div>
             )}

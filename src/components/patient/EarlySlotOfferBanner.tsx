@@ -11,12 +11,11 @@ import {
   Sparkles,
   Clock,
   CheckCircle2,
-  XCircle,
   AlertCircle,
   Loader2,
   Calendar,
   MapPin,
-  Stethoscope,
+  ArrowRight,
 } from "lucide-react";
 import { formatTime12h, formatCountdown, getRemainingSeconds } from "@/lib/utils/date";
 import { useRouter } from "next/navigation";
@@ -73,7 +72,7 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
         // Expired!
         clearInterval(timer);
         setOffer(null);
-        setStatusMessage("The earlier slot offer has expired and was offered to the next patient.");
+        setStatusMessage("The earlier slot offer has expired and was offered to the next eligible patient.");
         fetchActiveOffer();
       }
     }, 1000);
@@ -88,7 +87,7 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
 
     const res = await acceptEarlyOfferAction(offer.offer_id);
     if (res.success) {
-      setStatusMessage("Congratulations! Your appointment has been moved to the earlier slot.");
+      setStatusMessage("Earlier slot confirmed! Your appointment has been moved successfully without extra charges.");
       setOffer(null);
       router.refresh();
     } else {
@@ -104,7 +103,7 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
 
     const res = await declineEarlyOfferAction(offer.offer_id);
     if (res.success) {
-      setStatusMessage("Offer declined. Your original appointment remains unchanged.");
+      setStatusMessage("Offer declined. Your original scheduled consultation remains unchanged.");
       setOffer(null);
       router.refresh();
     } else {
@@ -120,14 +119,14 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
   return (
     <div className="space-y-3">
       {statusMessage && (
-        <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 text-teal-900 text-xs flex items-center justify-between animate-in fade-in">
+        <div className="p-4 rounded-xl bg-sage-light border border-sage-dark/80 text-forest text-xs flex items-center justify-between animate-in fade-in">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-forest shrink-0" />
             <span className="font-semibold">{statusMessage}</span>
           </div>
           <button
             onClick={() => setStatusMessage(null)}
-            className="text-[11px] text-teal-700 hover:text-teal-900 font-bold ml-2"
+            className="text-[11px] text-forest hover:text-forest-dark font-bold ml-2 underline"
           >
             Dismiss
           </button>
@@ -135,117 +134,104 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
       )}
 
       {offer && (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-700 to-slate-900 p-6 sm:p-7 text-white shadow-xl border border-emerald-400/40 animate-in fade-in slide-in-from-top-3">
+        <div className="relative overflow-hidden rounded-xl bg-forest border-2 border-terracotta p-6 sm:p-7 text-ivory shadow-lg animate-in fade-in slide-in-from-top-3">
           {/* Top Badge & Countdown Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/15">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-amber-950 shadow-xs">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>EARLIER APPOINTMENT OFFER AVAILABLE</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-forest-light">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold bg-terracotta text-ink tracking-wider uppercase">
+                <Sparkles className="w-3.5 h-3.5 text-forest" />
+                <span>Expedited Slot Opportunity</span>
+              </span>
+              <span className="text-xs text-sage font-medium hidden sm:inline">
+                A prior consultation finished ahead of schedule
               </span>
             </div>
 
-            {/* Live Countdown */}
-            <div className="flex items-center gap-2 bg-black/30 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 self-start sm:self-auto">
-              <Clock className="w-4 h-4 text-amber-300 animate-pulse" />
-              <span className="text-xs font-semibold text-slate-200">
-                Offer Expires In:
-              </span>
-              <span className="font-mono text-sm font-extrabold text-amber-300">
-                {formatCountdown(secondsRemaining)}
-              </span>
+            {/* Countdown Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-[#182821] border border-terracotta/40 text-terracotta text-xs font-mono font-bold self-start sm:self-auto">
+              <Clock className="w-4 h-4 text-terracotta animate-pulse" />
+              <span>Response Window: {formatCountdown(secondsRemaining)}</span>
             </div>
           </div>
 
-          {/* Details Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-5 items-center">
-            {/* Doctor Info */}
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shrink-0">
-                <Stethoscope className="w-6 h-6 text-teal-200" />
+          {/* Core Opportunity Details */}
+          <div className="py-5 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+            <div className="md:col-span-8 space-y-2">
+              <div className="text-xs text-sage font-semibold uppercase tracking-wider">
+                Physician Availability
               </div>
-              <div>
-                <div className="text-[10px] text-teal-200 uppercase font-bold tracking-wider">
-                  Attending Doctor
+              <h3 className="font-serif text-2xl font-bold text-white leading-tight">
+                {offer.doctor?.user?.full_name || "Doctor"}
+              </h3>
+              <p className="text-xs text-[#BAC8BF]">
+                {offer.doctor?.specialization} • {offer.doctor?.qualification}
+              </p>
+
+              {offer.doctor?.clinic_address && (
+                <div className="flex items-center gap-1.5 text-xs text-[#BAC8BF] pt-1">
+                  <MapPin className="w-3.5 h-3.5 text-sage shrink-0" />
+                  <span>{offer.doctor.clinic_address}</span>
                 </div>
-                <div className="text-base font-extrabold text-white">
-                  {offer.doctor?.user?.full_name || "Doctor"}
-                </div>
-                <div className="text-xs text-teal-200">
-                  {offer.doctor?.specialization}
-                </div>
-              </div>
-            </div>
+              )}
 
-            {/* Offered Time Slot */}
-            <div>
-              <div className="text-[10px] text-teal-200 uppercase font-bold tracking-wider">
-                Offered Earlier Time (IST)
-              </div>
-              <div className="text-base font-extrabold text-white mt-0.5 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-amber-300" />
-                <span>{offer.slot?.available_date}</span>
-              </div>
-              <div className="text-xs font-semibold text-emerald-200">
-                {offer.slot?.start_time ? formatTime12h(offer.slot.start_time) : ""}{" "}
-                -{" "}
-                {offer.slot?.end_time ? formatTime12h(offer.slot.end_time) : ""}
-              </div>
-            </div>
-
-            {/* Clinic Location */}
-            <div>
-              <div className="text-[10px] text-teal-200 uppercase font-bold tracking-wider flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-teal-300" /> Clinic Location
-              </div>
-              <div className="text-xs text-slate-200 mt-0.5 line-clamp-2">
-                {offer.doctor?.clinic_address || "Medrella Healthcare Clinic, Mumbai"}
-              </div>
-              <div className="text-[11px] text-emerald-200/90 mt-1 font-medium">
-                ✓ No extra charge • Original booking fee preserved
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <p className="text-xs text-slate-200 leading-tight">
-              Dr. {offer.doctor?.user?.full_name || "Doctor"} finished an earlier visit ahead of schedule.
-              Would you like to move up your appointment?
-            </p>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={handleDecline}
-                disabled={loadingAction !== null}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold text-white/90 bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-              >
-                {loadingAction === "decline" ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <XCircle className="w-4 h-4" />
+              {/* Time Shift Comparison */}
+              <div className="pt-3 flex flex-wrap items-center gap-3 text-xs">
+                {offer.original_appointment && (
+                  <div className="px-3 py-1.5 rounded-md bg-[#1D3128] border border-warm-border/20 text-[#8EA094] line-through">
+                    Original: {new Date(offer.original_appointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
                 )}
-                <span>Decline Offer</span>
-              </button>
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-[#182821] border border-terracotta/60 text-white font-semibold">
+                  <Calendar className="w-3.5 h-3.5 text-terracotta" />
+                  <span>
+                    New Slot: {offer.slot?.available_date} @ {formatTime12h(offer.slot?.start_time || "")}
+                  </span>
+                </div>
+              </div>
+            </div>
 
+            {/* Accept / Decline Action Group */}
+            <div className="md:col-span-4 flex flex-col gap-2.5">
               <button
-                onClick={handleAccept}
                 disabled={loadingAction !== null}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-slate-900 bg-amber-400 hover:bg-amber-300 transition-all shadow-lg shadow-amber-400/20 active:scale-95"
+                onClick={handleAccept}
+                className="btn-terracotta w-full py-3 text-xs font-bold shadow-sm flex items-center justify-center gap-2"
               >
                 {loadingAction === "accept" ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
-                    <span>Reserving Earlier Slot...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-ink" />
+                    <span>Confirming Earlier Slot...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-slate-900" />
+                    <CheckCircle2 className="w-4 h-4 text-forest" />
                     <span>Accept Earlier Slot</span>
                   </>
                 )}
               </button>
+
+              <button
+                disabled={loadingAction !== null}
+                onClick={handleDecline}
+                className="w-full py-2.5 px-3 rounded-md text-xs font-medium text-ivory hover:text-white bg-[#1D3128] hover:bg-[#253D32] border border-warm-border/30 transition-colors flex items-center justify-center gap-1.5"
+              >
+                {loadingAction === "decline" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <span>Keep Original Appointment</span>
+                )}
+              </button>
             </div>
+          </div>
+
+          {/* Footer Note */}
+          <div className="pt-3 border-t border-forest-light text-[11px] text-[#BAC8BF] flex items-center justify-between">
+            <span>
+              Your original appointment remains 100% reserved unless you accept. No extra fees apply.
+            </span>
+            <span className="font-semibold text-terracotta text-[10px] uppercase tracking-wider">
+              Atomic Booking Guarantee
+            </span>
           </div>
         </div>
       )}
