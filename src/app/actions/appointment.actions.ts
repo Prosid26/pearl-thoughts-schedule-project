@@ -8,6 +8,14 @@ import {
   rescheduleAppointmentSchema,
 } from "@/lib/validations/schemas";
 import { AppointmentStatus, Availability } from "@/types/database";
+import {
+  sendClinicalNotification,
+  scheduleAppointmentReminders,
+  rescheduleAppointmentReminders,
+  cancelAppointmentReminders,
+} from "@/lib/notifications";
+import { getPaymentProvider, calculateEligibleRefund } from "@/lib/payments";
+import { formatINR } from "@/lib/utils/currency";
 import { revalidatePath } from "next/cache";
 
 export interface ActionResult<T = unknown> {
@@ -62,6 +70,31 @@ export async function bookAppointmentAction(
       reason,
     });
 
+    // Send booking confirmation notification
+    if (session.email) {
+      const appTime = appointment.availability
+        ? `${appointment.availability.start_time.slice(0, 5)} – ${appointment.availability.end_time.slice(0, 5)} IST`
+        : "Scheduled Window";
+
+      sendClinicalNotification("booking_confirmed", {
+        recipientEmail: session.email,
+        recipientName: session.full_name,
+        userId: session.user_id,
+        appointmentId: appointment.appointment_id,
+        doctorName: appointment.doctor?.user?.full_name || "Doctor",
+        specialization: appointment.doctor?.specialization || "Specialist",
+        appointmentDate: appointment.appointment_date,
+        appointmentTimeStr: appTime,
+        clinicAddress: appointment.doctor?.clinic_address,
+        idempotencyKey: `notif_book_${appointment.appointment_id}`,
+      }).catch((err) => console.warn("Async booking notif error:", err));
+    }
+
+    // Schedule reminders
+    scheduleAppointmentReminders(appointment.appointment_id).catch((err) =>
+      console.warn("Async reminder schedule error:", err)
+    );
+
     // Revalidate affected views
     revalidatePath("/patient/appointments");
     revalidatePath("/doctor/appointments");
@@ -101,12 +134,123 @@ export async function updateAppointmentStatusAction(
       };
     }
 
-    await db.updateAppointmentStatus({
+    const appBefore = await db.getAppointmentById(appointmentId);
+
+    const updatedApp = await db.updateAppointmentStatus({
       appointmentId,
       newStatus,
       requesterUserId: session.user_id,
       requesterRole: session.role,
     });
+
+    // Cancellation Workflow: Reminders, Refund Evaluation & Notifications
+    if (newStatus === "cancelled" || newStatus === "rejected") {
+      // 1. Cancel background reminders
+      await cancelAppointmentReminders(appointmentId).catch((err) =>
+        console.warn("Error cancelling reminders:", err)
+      );
+
+      // 2. Evaluate refund under clinical policy if payment was made
+      let refundOutcome: {
+        refundInitiated: boolean;
+        amount: number;
+        policyApplied: string;
+      } | null = null;
+
+      const payments = await db.getPaymentsForAppointment(appointmentId);
+      const capturedPayment = payments.find((p) => p.status === "captured");
+
+      if (capturedPayment) {
+        const existingRefunds = await db.getRefundsForPayment(
+          capturedPayment.payment_id
+        );
+        const alreadyRefunded = existingRefunds
+          .filter((r) => r.status !== "failed")
+          .reduce((sum, r) => sum + r.amount, 0);
+
+        const policyResult = calculateEligibleRefund({
+          appointmentDate: appBefore?.appointment_date || updatedApp.appointment_date,
+          cancelledByRole: session.role,
+          capturedAmount: capturedPayment.amount,
+          alreadyRefundedAmount: alreadyRefunded,
+        });
+
+        if (policyResult.canRefund && policyResult.eligibleAmount > 0) {
+          const provider = getPaymentProvider();
+          const refundIdempotencyKey = `cancel_rfnd_${capturedPayment.payment_id}_${Date.now()}`;
+
+          try {
+            const providerRefund = await provider.createRefund({
+              paymentId:
+                capturedPayment.provider_payment_id ||
+                capturedPayment.provider_order_id,
+              amount: policyResult.eligibleAmount,
+              reason: policyResult.reason,
+              idempotencyKey: refundIdempotencyKey,
+            });
+
+            await db.createRefundRecord({
+              paymentId: capturedPayment.payment_id,
+              appointmentId,
+              amount: policyResult.eligibleAmount,
+              currency: capturedPayment.currency,
+              reason: policyResult.reason,
+              policyApplied: policyResult.policyApplied,
+              provider: provider.name,
+              providerRefundId: providerRefund.refundId,
+              idempotencyKey: refundIdempotencyKey,
+              status: "processed",
+            });
+
+            refundOutcome = {
+              refundInitiated: true,
+              amount: policyResult.eligibleAmount,
+              policyApplied: policyResult.policyApplied,
+            };
+          } catch (providerErr: unknown) {
+            console.error("Provider refund failed during cancellation:", providerErr);
+            // Record failure without reverting appointment cancellation (Separation of cancellation from refund)
+            await db.createRefundRecord({
+              paymentId: capturedPayment.payment_id,
+              appointmentId,
+              amount: policyResult.eligibleAmount,
+              currency: capturedPayment.currency,
+              reason: policyResult.reason,
+              policyApplied: policyResult.policyApplied,
+              provider: provider.name,
+              idempotencyKey: refundIdempotencyKey,
+              status: "failed",
+              errorMessage:
+                providerErr instanceof Error
+                  ? providerErr.message
+                  : "Gateway refund failed",
+            });
+          }
+        }
+      }
+
+      // 3. Dispatch Cancellation Notification
+      const patientEmail = updatedApp.patient?.user?.email;
+      if (patientEmail) {
+        sendClinicalNotification("appointment_cancelled", {
+          recipientEmail: patientEmail,
+          recipientName: updatedApp.patient?.user?.full_name || "Patient",
+          userId: updatedApp.patient?.user_id || updatedApp.patient_id,
+          appointmentId: updatedApp.appointment_id,
+          doctorName: updatedApp.doctor?.user?.full_name || "Doctor",
+          specialization: updatedApp.doctor?.specialization || "Specialist",
+          appointmentDate: updatedApp.appointment_date,
+          appointmentTimeStr: updatedApp.availability
+            ? `${updatedApp.availability.start_time.slice(0, 5)} IST`
+            : "",
+          refundAmountFormatted: refundOutcome
+            ? formatINR(refundOutcome.amount / 100)
+            : undefined,
+          refundReason: refundOutcome?.policyApplied,
+          idempotencyKey: `notif_cancel_${updatedApp.appointment_id}`,
+        }).catch((err) => console.warn("Async cancel notif error:", err));
+      }
+    }
 
     revalidatePath("/doctor/dashboard");
     revalidatePath("/doctor/appointments");
@@ -157,6 +301,32 @@ export async function rescheduleAppointmentAction(
       requesterUserId: session.user_id,
       requesterRole: session.role,
     });
+
+    // Reschedule background reminders
+    await rescheduleAppointmentReminders(updated.appointment_id).catch((err) =>
+      console.warn("Error rescheduling reminders:", err)
+    );
+
+    // Dispatch Rescheduling Notification
+    const patientEmail = updated.patient?.user?.email;
+    if (patientEmail) {
+      const appTime = updated.availability
+        ? `${updated.availability.start_time.slice(0, 5)} – ${updated.availability.end_time.slice(0, 5)} IST`
+        : "Scheduled Window";
+
+      sendClinicalNotification("appointment_rescheduled", {
+        recipientEmail: patientEmail,
+        recipientName: updated.patient?.user?.full_name || "Patient",
+        userId: updated.patient?.user_id || updated.patient_id,
+        appointmentId: updated.appointment_id,
+        doctorName: updated.doctor?.user?.full_name || "Doctor",
+        specialization: updated.doctor?.specialization || "Specialist",
+        appointmentDate: updated.appointment_date,
+        appointmentTimeStr: appTime,
+        clinicAddress: updated.doctor?.clinic_address,
+        idempotencyKey: `notif_resched_${updated.appointment_id}_${Date.now()}`,
+      }).catch((err) => console.warn("Async reschedule notif error:", err));
+    }
 
     revalidatePath("/patient/appointments");
     revalidatePath("/patient/dashboard");

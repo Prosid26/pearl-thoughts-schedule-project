@@ -14,6 +14,14 @@ import {
   EarlySlotOffer,
   NotificationType,
   InAppNotification,
+  Payment,
+  PaymentStatus,
+  AppointmentPaymentStatus,
+  Refund,
+  RefundStatus,
+  WebhookEvent,
+  NotificationLog,
+  ScheduledReminder,
 } from "@/types/database";
 
 interface DatabaseState {
@@ -25,6 +33,11 @@ interface DatabaseState {
   waitingQueue: WaitingQueueEntry[];
   earlySlotOffers: EarlySlotOffer[];
   notifications: InAppNotification[];
+  payments: Payment[];
+  refunds: Refund[];
+  webhookEvents: WebhookEvent[];
+  notificationLogs: NotificationLog[];
+  scheduledReminders: ScheduledReminder[];
   counters: {
     userId: number;
     patientId: number;
@@ -34,6 +47,11 @@ interface DatabaseState {
     queueId: number;
     offerId: number;
     notificationId: number;
+    paymentId: number;
+    refundId: number;
+    webhookEventId: number;
+    deliveryId: number;
+    reminderId: number;
   };
 }
 
@@ -550,6 +568,11 @@ function generateInitialSeed(): DatabaseState {
     waitingQueue,
     earlySlotOffers: [],
     notifications: [],
+    payments: [],
+    refunds: [],
+    webhookEvents: [],
+    notificationLogs: [],
+    scheduledReminders: [],
     counters: {
       userId: 11,
       patientId: 2,
@@ -559,6 +582,11 @@ function generateInitialSeed(): DatabaseState {
       queueId: 1,
       offerId: 0,
       notificationId: 0,
+      paymentId: 0,
+      refundId: 0,
+      webhookEventId: 0,
+      deliveryId: 0,
+      reminderId: 0,
     },
   };
 }
@@ -591,10 +619,20 @@ class LocalDatabase {
           if (!parsed.waitingQueue) parsed.waitingQueue = [];
           if (!parsed.earlySlotOffers) parsed.earlySlotOffers = [];
           if (!parsed.notifications) parsed.notifications = [];
+          if (!parsed.payments) parsed.payments = [];
+          if (!parsed.refunds) parsed.refunds = [];
+          if (!parsed.webhookEvents) parsed.webhookEvents = [];
+          if (!parsed.notificationLogs) parsed.notificationLogs = [];
+          if (!parsed.scheduledReminders) parsed.scheduledReminders = [];
           if (!parsed.counters) parsed.counters = {};
           if (!parsed.counters.queueId) parsed.counters.queueId = parsed.waitingQueue.length;
           if (!parsed.counters.offerId) parsed.counters.offerId = parsed.earlySlotOffers.length;
           if (!parsed.counters.notificationId) parsed.counters.notificationId = parsed.notifications.length;
+          if (!parsed.counters.paymentId) parsed.counters.paymentId = parsed.payments.length;
+          if (!parsed.counters.refundId) parsed.counters.refundId = parsed.refunds.length;
+          if (!parsed.counters.webhookEventId) parsed.counters.webhookEventId = parsed.webhookEvents.length;
+          if (!parsed.counters.deliveryId) parsed.counters.deliveryId = parsed.notificationLogs.length;
+          if (!parsed.counters.reminderId) parsed.counters.reminderId = parsed.scheduledReminders.length;
           if (!parsed.users.some((u: User) => u.email === "admin@demo.com")) {
             parsed.users.push({
               user_id: 11,
@@ -1103,6 +1141,7 @@ class LocalDatabase {
       availability_id: availabilityId,
       appointment_date: appointmentDate,
       status: "pending",
+      payment_status: "unpaid",
       reason: reason.trim(),
       wave_number: waveNum,
       estimated_consult_time: estConsult,
@@ -1886,13 +1925,464 @@ class LocalDatabase {
     const doctor = this.getDoctorById(app.doctor_id);
     const patient = this.getPatientById(app.patient_id);
     const availability = this.getAvailabilityById(app.availability_id);
+    const payments = this.state.payments.filter(
+      (p) => p.appointment_id === app.appointment_id
+    );
+    const refunds = this.state.refunds.filter(
+      (r) => r.appointment_id === app.appointment_id
+    );
 
     return {
       ...app,
+      payment_status: app.payment_status || "unpaid",
       doctor,
       patient,
       availability,
+      payments,
+      refunds,
     };
+  }
+
+  // --- Payments ---
+  public createPayment(params: {
+    appointmentId: number;
+    patientId: number;
+    provider: string;
+    providerOrderId: string;
+    amount: number;
+    currency?: string;
+    idempotencyKey?: string;
+  }): Payment {
+    if (params.idempotencyKey) {
+      const existing = this.state.payments.find(
+        (p) => p.idempotency_key === params.idempotencyKey
+      );
+      if (existing) return existing;
+    }
+
+    this.state.counters.paymentId = (this.state.counters.paymentId || 0) + 1;
+    const payment: Payment = {
+      payment_id: this.state.counters.paymentId,
+      appointment_id: params.appointmentId,
+      patient_id: params.patientId,
+      provider: params.provider || "razorpay",
+      provider_order_id: params.providerOrderId,
+      amount: params.amount,
+      currency: params.currency || "INR",
+      status: "pending",
+      idempotency_key: params.idempotencyKey || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.payments.push(payment);
+
+    const app = this.state.appointments.find(
+      (a) => a.appointment_id === params.appointmentId
+    );
+    if (app && (!app.payment_status || app.payment_status === "unpaid")) {
+      app.payment_status = "pending";
+    }
+
+    this.commit();
+    return payment;
+  }
+
+  public getPaymentById(paymentId: number): Payment | null {
+    const p = this.state.payments.find((x) => x.payment_id === paymentId);
+    if (!p) return null;
+    const refunds = this.state.refunds.filter((r) => r.payment_id === paymentId);
+    return { ...p, refunds };
+  }
+
+  public getPaymentByOrderId(orderId: string): Payment | null {
+    const p = this.state.payments.find((x) => x.provider_order_id === orderId);
+    if (!p) return null;
+    const refunds = this.state.refunds.filter((r) => r.payment_id === p.payment_id);
+    return { ...p, refunds };
+  }
+
+  public getPaymentByProviderPaymentId(providerPaymentId: string): Payment | null {
+    const p = this.state.payments.find((x) => x.provider_payment_id === providerPaymentId);
+    if (!p) return null;
+    const refunds = this.state.refunds.filter((r) => r.payment_id === p.payment_id);
+    return { ...p, refunds };
+  }
+
+  public getPaymentsForAppointment(appointmentId: number): Payment[] {
+    return this.state.payments
+      .filter((p) => p.appointment_id === appointmentId)
+      .map((p) => ({
+        ...p,
+        refunds: this.state.refunds.filter((r) => r.payment_id === p.payment_id),
+      }));
+  }
+
+  public getPaymentsForPatient(patientId: number): Payment[] {
+    return this.state.payments
+      .filter((p) => p.patient_id === patientId)
+      .map((p) => ({
+        ...p,
+        appointment: this.getAppointmentById(p.appointment_id) || undefined,
+        refunds: this.state.refunds.filter((r) => r.payment_id === p.payment_id),
+      }))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public updatePaymentStatus(params: {
+    paymentId: number;
+    status: PaymentStatus;
+    providerPaymentId?: string;
+    providerSignature?: string;
+    failureReason?: string;
+  }): Payment {
+    const p = this.state.payments.find((x) => x.payment_id === params.paymentId);
+    if (!p) throw new Error("Payment record not found");
+
+    p.status = params.status;
+    if (params.providerPaymentId) p.provider_payment_id = params.providerPaymentId;
+    if (params.providerSignature) p.provider_signature = params.providerSignature;
+    if (params.failureReason) p.failure_reason = params.failureReason;
+    p.updated_at = new Date().toISOString();
+
+    // Mirror to appointment payment_status
+    const app = this.state.appointments.find((a) => a.appointment_id === p.appointment_id);
+    if (app) {
+      if (params.status === "captured") {
+        app.payment_status = "paid";
+        if (app.status === "pending") {
+          app.status = "confirmed";
+        }
+      } else if (params.status === "failed") {
+        app.payment_status = "failed";
+      } else if (params.status === "refunded") {
+        app.payment_status = "refunded";
+      } else if (params.status === "partially_refunded") {
+        app.payment_status = "partially_refunded";
+      } else if (params.status === "abandoned") {
+        app.payment_status = "unpaid";
+      }
+    }
+
+    this.commit();
+    return p;
+  }
+
+  public updateAppointmentPaymentStatus(
+    appointmentId: number,
+    paymentStatus: AppointmentPaymentStatus
+  ): void {
+    const app = this.state.appointments.find((a) => a.appointment_id === appointmentId);
+    if (app) {
+      app.payment_status = paymentStatus;
+      this.commit();
+    }
+  }
+
+  // --- Refunds ---
+  public createRefundRecord(params: {
+    paymentId: number;
+    appointmentId: number;
+    amount: number;
+    currency?: string;
+    reason: string;
+    policyApplied: string;
+    provider: string;
+    providerRefundId?: string;
+    idempotencyKey?: string;
+    status?: RefundStatus;
+    errorMessage?: string;
+  }): Refund {
+    if (params.idempotencyKey) {
+      const existing = this.state.refunds.find(
+        (r) => r.idempotency_key === params.idempotencyKey
+      );
+      if (existing) return existing;
+    }
+
+    const payment = this.getPaymentById(params.paymentId);
+    if (!payment) throw new Error("Payment not found for refund creation");
+
+    const existingTotal = this.state.refunds
+      .filter((r) => r.payment_id === params.paymentId && r.status !== "failed")
+      .reduce((sum, r) => sum + r.amount, 0);
+
+    if (existingTotal + params.amount > payment.amount) {
+      throw new Error(
+        `Refund amount (${params.amount}) exceeds captured payment ceiling (total: ${payment.amount}, already refunded: ${existingTotal}).`
+      );
+    }
+
+    this.state.counters.refundId = (this.state.counters.refundId || 0) + 1;
+    const refund: Refund = {
+      refund_id: this.state.counters.refundId,
+      payment_id: params.paymentId,
+      appointment_id: params.appointmentId,
+      amount: params.amount,
+      currency: params.currency || "INR",
+      reason: params.reason,
+      policy_applied: params.policyApplied,
+      provider: params.provider || "razorpay",
+      provider_refund_id: params.providerRefundId || null,
+      idempotency_key: params.idempotencyKey || null,
+      status: params.status || "pending",
+      error_message: params.errorMessage || null,
+      created_at: new Date().toISOString(),
+      processed_at: params.status === "processed" ? new Date().toISOString() : null,
+    };
+
+    this.state.refunds.push(refund);
+
+    if (refund.status === "processed") {
+      const totalRefunded = existingTotal + params.amount;
+      const newStatus =
+        totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
+      payment.status = newStatus;
+      const app = this.state.appointments.find(
+        (a) => a.appointment_id === params.appointmentId
+      );
+      if (app) {
+        app.payment_status = newStatus;
+      }
+    }
+
+    this.commit();
+    return refund;
+  }
+
+  public getRefundsForPayment(paymentId: number): Refund[] {
+    return this.state.refunds.filter((r) => r.payment_id === paymentId);
+  }
+
+  public getRefundsForAppointment(appointmentId: number): Refund[] {
+    return this.state.refunds.filter((r) => r.appointment_id === appointmentId);
+  }
+
+  public updateRefundStatus(params: {
+    refundId: number;
+    status: RefundStatus;
+    providerRefundId?: string;
+    errorMessage?: string;
+  }): Refund {
+    const r = this.state.refunds.find((x) => x.refund_id === params.refundId);
+    if (!r) throw new Error("Refund record not found");
+
+    r.status = params.status;
+    if (params.providerRefundId) r.provider_refund_id = params.providerRefundId;
+    if (params.errorMessage) r.error_message = params.errorMessage;
+    if (params.status === "processed") r.processed_at = new Date().toISOString();
+
+    if (params.status === "processed") {
+      const payment = this.getPaymentById(r.payment_id);
+      if (payment) {
+        const totalRefunded = this.state.refunds
+          .filter((ref) => ref.payment_id === r.payment_id && ref.status === "processed")
+          .reduce((sum, ref) => sum + ref.amount, 0);
+        const newStatus =
+          totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
+        payment.status = newStatus;
+        const app = this.state.appointments.find((a) => a.appointment_id === r.appointment_id);
+        if (app) app.payment_status = newStatus;
+      }
+    }
+
+    this.commit();
+    return r;
+  }
+
+  // --- Webhook Events (Idempotency) ---
+  public recordWebhookEvent(params: {
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    payload: string;
+    status?: "processing" | "processed" | "failed";
+    errorMessage?: string;
+  }): WebhookEvent {
+    const existing = this.state.webhookEvents.find(
+      (w) =>
+        w.provider === params.provider &&
+        w.provider_event_id === params.providerEventId
+    );
+    if (existing) return existing;
+
+    this.state.counters.webhookEventId =
+      (this.state.counters.webhookEventId || 0) + 1;
+    const event: WebhookEvent = {
+      event_id: this.state.counters.webhookEventId,
+      provider: params.provider,
+      provider_event_id: params.providerEventId,
+      event_type: params.eventType,
+      payload: params.payload,
+      status: params.status || "processed",
+      error_message: params.errorMessage || null,
+      created_at: new Date().toISOString(),
+    };
+
+    this.state.webhookEvents.push(event);
+    this.commit();
+    return event;
+  }
+
+  public getWebhookEvent(
+    provider: string,
+    providerEventId: string
+  ): WebhookEvent | null {
+    const ev = this.state.webhookEvents.find(
+      (w) => w.provider === provider && w.provider_event_id === providerEventId
+    );
+    return ev || null;
+  }
+
+  // --- Notification Logs ---
+  public createNotificationLog(params: {
+    userId: number;
+    recipientEmail: string;
+    channel?: "email" | "sms" | "whatsapp";
+    eventType: string;
+    subject: string;
+    appointmentId?: number | null;
+    status?: "pending" | "sent" | "delivered" | "failed" | "simulated";
+    provider?: string;
+    providerMessageId?: string;
+    idempotencyKey?: string;
+    errorMessage?: string;
+  }): NotificationLog {
+    if (params.idempotencyKey) {
+      const existing = this.state.notificationLogs.find(
+        (l) => l.idempotency_key === params.idempotencyKey
+      );
+      if (existing) return existing;
+    }
+
+    this.state.counters.deliveryId = (this.state.counters.deliveryId || 0) + 1;
+    const log: NotificationLog = {
+      delivery_id: this.state.counters.deliveryId,
+      user_id: params.userId,
+      recipient_email: params.recipientEmail,
+      channel: params.channel || "email",
+      event_type: params.eventType,
+      subject: params.subject,
+      appointment_id: params.appointmentId ?? null,
+      status: params.status || "delivered",
+      provider: params.provider || "console",
+      provider_message_id: params.providerMessageId || null,
+      idempotency_key: params.idempotencyKey || null,
+      error_message: params.errorMessage || null,
+      created_at: new Date().toISOString(),
+    };
+
+    this.state.notificationLogs.push(log);
+    this.commit();
+    return log;
+  }
+
+  public getNotificationLogByIdempotency(
+    idempotencyKey: string
+  ): NotificationLog | null {
+    const l = this.state.notificationLogs.find(
+      (x) => x.idempotency_key === idempotencyKey
+    );
+    return l || null;
+  }
+
+  public createInAppNotification(params: {
+    userId: number;
+    title: string;
+    message: string;
+    type?: NotificationType;
+    relatedOfferId?: number | null;
+  }): InAppNotification {
+    this.state.counters.notificationId =
+      (this.state.counters.notificationId || 0) + 1;
+    const notif: InAppNotification = {
+      notification_id: this.state.counters.notificationId,
+      user_id: params.userId,
+      title: params.title,
+      message: params.message,
+      type: params.type || "general",
+      related_offer_id: params.relatedOfferId || null,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    this.state.notifications.unshift(notif);
+    this.commit();
+    return notif;
+  }
+
+  // --- Scheduled Reminders ---
+  public upsertScheduledReminder(params: {
+    appointmentId: number;
+    reminderType: string;
+    scheduledFor: Date | string;
+  }): ScheduledReminder {
+    const scheduledForIso =
+      params.scheduledFor instanceof Date
+        ? params.scheduledFor.toISOString()
+        : new Date(params.scheduledFor).toISOString();
+
+    const existing = this.state.scheduledReminders.find(
+      (r) =>
+        r.appointment_id === params.appointmentId &&
+        r.reminder_type === params.reminderType
+    );
+
+    if (existing) {
+      existing.scheduled_for = scheduledForIso;
+      existing.status = "scheduled";
+      existing.updated_at = new Date().toISOString();
+      this.commit();
+      return existing;
+    }
+
+    this.state.counters.reminderId = (this.state.counters.reminderId || 0) + 1;
+    const reminder: ScheduledReminder = {
+      reminder_id: this.state.counters.reminderId,
+      appointment_id: params.appointmentId,
+      reminder_type: params.reminderType,
+      scheduled_for: scheduledForIso,
+      status: "scheduled",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.scheduledReminders.push(reminder);
+    this.commit();
+    return reminder;
+  }
+
+  public cancelRemindersForAppointment(appointmentId: number): void {
+    for (const r of this.state.scheduledReminders) {
+      if (r.appointment_id === appointmentId && r.status === "scheduled") {
+        r.status = "cancelled";
+        r.updated_at = new Date().toISOString();
+      }
+    }
+    this.commit();
+  }
+
+  public getDueScheduledReminders(): ScheduledReminder[] {
+    const now = Date.now();
+    return this.state.scheduledReminders.filter(
+      (r) =>
+        r.status === "scheduled" &&
+        new Date(r.scheduled_for).getTime() <= now
+    );
+  }
+
+  public updateReminderStatus(
+    reminderId: number,
+    status: "scheduled" | "sent" | "cancelled" | "failed",
+    errorMessage?: string
+  ): void {
+    const r = this.state.scheduledReminders.find((x) => x.reminder_id === reminderId);
+    if (r) {
+      r.status = status;
+      if (status === "sent") r.sent_at = new Date().toISOString();
+      if (errorMessage) r.error_message = errorMessage;
+      r.updated_at = new Date().toISOString();
+      this.commit();
+    }
   }
 }
 

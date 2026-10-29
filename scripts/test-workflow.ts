@@ -70,7 +70,7 @@ async function runTestSuite() {
   const targetDoctor = cardiologists[0];
   const openSlots = localDb.getDoctorAvailability(targetDoctor.doctor_id, undefined, true);
   assert(openSlots.length > 0, `Found ${openSlots.length} available slots for ${targetDoctor.user?.full_name}`);
-  const slotToBook = openSlots[0];
+  const slotToBook = openSlots.find((s) => !s.is_wave) || openSlots[0];
 
   // TEST 5: Atomic Slot Booking
   console.log("\nTEST 5: Atomic Appointment Booking Workflow");

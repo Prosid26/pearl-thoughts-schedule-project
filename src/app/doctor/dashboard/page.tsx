@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
-import { formatISTDate, formatTime12h } from "@/lib/utils/date";
+import { formatISTDate, formatISTTime, formatTime12h } from "@/lib/utils/date";
 
 export default async function DoctorDashboardPage() {
   const session = await getSession();
@@ -195,7 +195,7 @@ export default async function DoctorDashboardPage() {
                   <div>
                     <div className="font-serif font-bold text-ink">{item.patient_name}</div>
                     <div className="text-[11px] text-ink-muted">
-                      Checked in: {new Date(item.check_in_time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} IST
+                      Checked in: {formatISTTime(item.check_in_time)} IST
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-terracotta-light text-ink border border-terracotta uppercase">

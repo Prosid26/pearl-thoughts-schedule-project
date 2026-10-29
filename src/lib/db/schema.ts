@@ -148,6 +148,7 @@ export const appointments = pgTable("appointments", {
     .references(() => availability.availability_id, { onDelete: "restrict" }),
   appointment_date: timestamp("appointment_date", { withTimezone: true }).notNull(),
   status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | confirmed | cancelled | rejected | completed
+  payment_status: varchar("payment_status", { length: 30 }).notNull().default("unpaid"), // unpaid | pending | paid | partially_refunded | refunded | failed
   reason: text("reason").notNull(),
   rescheduled_from_id: integer("rescheduled_from_id"),
   wave_number: integer("wave_number"),
@@ -155,7 +156,7 @@ export const appointments = pgTable("appointments", {
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const appointmentsRelations = relations(appointments, ({ one }) => ({
+export const appointmentsRelations = relations(appointments, ({ one, many }) => ({
   patient: one(patients, {
     fields: [appointments.patient_id],
     references: [patients.patient_id],
@@ -168,6 +169,10 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
     fields: [appointments.availability_id],
     references: [availability.availability_id],
   }),
+  payments: many(payments),
+  refunds: many(refunds),
+  scheduledReminders: many(scheduledReminders),
+  notificationLogs: many(notificationLogs),
 }));
 
 /**
@@ -287,6 +292,164 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   }),
 }));
 
+/**
+ * 9. PAYMENTS TABLE (Minor units: paise for exact precision)
+ */
+export const payments = pgTable("payments", {
+  payment_id: serial("payment_id").primaryKey(),
+  appointment_id: integer("appointment_id")
+    .notNull()
+    .references(() => appointments.appointment_id, { onDelete: "cascade" }),
+  patient_id: integer("patient_id")
+    .notNull()
+    .references(() => patients.patient_id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 30 }).notNull().default("razorpay"),
+  provider_order_id: varchar("provider_order_id", { length: 100 }).notNull().unique(),
+  provider_payment_id: varchar("provider_payment_id", { length: 100 }),
+  provider_signature: text("provider_signature"),
+  amount: integer("amount").notNull(), // minor units / paise
+  currency: varchar("currency", { length: 10 }).notNull().default("INR"),
+  status: varchar("status", { length: 30 }).notNull().default("pending"), // pending | captured | failed | abandoned | refunded | partially_refunded
+  idempotency_key: varchar("idempotency_key", { length: 100 }).unique(),
+  failure_reason: text("failure_reason"),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  appointment: one(appointments, {
+    fields: [payments.appointment_id],
+    references: [appointments.appointment_id],
+  }),
+  patient: one(patients, {
+    fields: [payments.patient_id],
+    references: [patients.patient_id],
+  }),
+  refunds: many(refunds),
+}));
+
+/**
+ * 10. REFUNDS TABLE
+ */
+export const refunds = pgTable("refunds", {
+  refund_id: serial("refund_id").primaryKey(),
+  payment_id: integer("payment_id")
+    .notNull()
+    .references(() => payments.payment_id, { onDelete: "cascade" }),
+  appointment_id: integer("appointment_id")
+    .notNull()
+    .references(() => appointments.appointment_id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(), // minor units / paise
+  currency: varchar("currency", { length: 10 }).notNull().default("INR"),
+  reason: text("reason").notNull(),
+  policy_applied: varchar("policy_applied", { length: 100 }).notNull(),
+  provider: varchar("provider", { length: 30 }).notNull().default("razorpay"),
+  provider_refund_id: varchar("provider_refund_id", { length: 100 }).unique(),
+  idempotency_key: varchar("idempotency_key", { length: 100 }).unique(),
+  status: varchar("status", { length: 30 }).notNull().default("pending"), // pending | processed | failed
+  error_message: text("error_message"),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  processed_at: timestamp("processed_at", { withTimezone: true }),
+});
+
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  payment: one(payments, {
+    fields: [refunds.payment_id],
+    references: [payments.payment_id],
+  }),
+  appointment: one(appointments, {
+    fields: [refunds.appointment_id],
+    references: [appointments.appointment_id],
+  }),
+}));
+
+/**
+ * 11. WEBHOOK EVENTS TABLE (Strict Idempotency Guard)
+ */
+export const webhookEvents = pgTable("webhook_events", {
+  event_id: serial("event_id").primaryKey(),
+  provider: varchar("provider", { length: 30 }).notNull().default("razorpay"),
+  provider_event_id: varchar("provider_event_id", { length: 150 }).notNull().unique(),
+  event_type: varchar("event_type", { length: 100 }).notNull(),
+  payload: text("payload").notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("processed"), // processing | processed | failed
+  error_message: text("error_message"),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * 12. NOTIFICATION LOGS & DELIVERY STATUS TABLE
+ */
+export const notificationLogs = pgTable("notification_logs", {
+  delivery_id: serial("delivery_id").primaryKey(),
+  user_id: integer("user_id")
+    .notNull()
+    .references(() => users.user_id, { onDelete: "cascade" }),
+  recipient_email: varchar("recipient_email", { length: 255 }).notNull(),
+  channel: varchar("channel", { length: 20 }).notNull().default("email"), // email | sms | whatsapp
+  event_type: varchar("event_type", { length: 50 }).notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  appointment_id: integer("appointment_id").references(
+    () => appointments.appointment_id,
+    { onDelete: "set null" }
+  ),
+  status: varchar("status", { length: 20 }).notNull().default("delivered"), // pending | sent | delivered | failed | simulated
+  provider: varchar("provider", { length: 50 }).notNull().default("console"), // resend | smtp | console | mock
+  provider_message_id: varchar("provider_message_id", { length: 150 }),
+  idempotency_key: varchar("idempotency_key", { length: 100 }).unique(),
+  error_message: text("error_message"),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const notificationLogsRelations = relations(notificationLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationLogs.user_id],
+    references: [users.user_id],
+  }),
+  appointment: one(appointments, {
+    fields: [notificationLogs.appointment_id],
+    references: [appointments.appointment_id],
+  }),
+}));
+
+/**
+ * 13. SCHEDULED REMINDERS TABLE (Durable Background Cron Reminders)
+ */
+export const scheduledReminders = pgTable(
+  "scheduled_reminders",
+  {
+    reminder_id: serial("reminder_id").primaryKey(),
+    appointment_id: integer("appointment_id")
+      .notNull()
+      .references(() => appointments.appointment_id, { onDelete: "cascade" }),
+    reminder_type: varchar("reminder_type", { length: 50 })
+      .notNull()
+      .default("24h_before"), // 24h_before | 2h_before
+    scheduled_for: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("scheduled"), // scheduled | sent | cancelled | failed
+    sent_at: timestamp("sent_at", { withTimezone: true }),
+    error_message: text("error_message"),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("appt_reminder_type_idx").on(
+      table.appointment_id,
+      table.reminder_type
+    ),
+  ]
+);
+
+export const scheduledRemindersRelations = relations(
+  scheduledReminders,
+  ({ one }) => ({
+    appointment: one(appointments, {
+      fields: [scheduledReminders.appointment_id],
+      references: [appointments.appointment_id],
+    }),
+  })
+);
+
 export type UserSelect = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
 
@@ -310,3 +473,18 @@ export type EarlySlotOfferInsert = typeof earlySlotOffers.$inferInsert;
 
 export type NotificationSelect = typeof notifications.$inferSelect;
 export type NotificationInsert = typeof notifications.$inferInsert;
+
+export type PaymentSelect = typeof payments.$inferSelect;
+export type PaymentInsert = typeof payments.$inferInsert;
+
+export type RefundSelect = typeof refunds.$inferSelect;
+export type RefundInsert = typeof refunds.$inferInsert;
+
+export type WebhookEventSelect = typeof webhookEvents.$inferSelect;
+export type WebhookEventInsert = typeof webhookEvents.$inferInsert;
+
+export type NotificationLogSelect = typeof notificationLogs.$inferSelect;
+export type NotificationLogInsert = typeof notificationLogs.$inferInsert;
+
+export type ScheduledReminderSelect = typeof scheduledReminders.$inferSelect;
+export type ScheduledReminderInsert = typeof scheduledReminders.$inferInsert;

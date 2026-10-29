@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { AppointmentStatusBadge } from "@/components/appointments/AppointmentStatusBadge";
+import { PaymentStatusBadge } from "@/components/payments/PaymentStatusBadge";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
 import {
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { EarlySlotOfferBanner } from "@/components/patient/EarlySlotOfferBanner";
 import { PatientNotificationsPanel } from "@/components/patient/PatientNotificationsPanel";
-import { formatISTDate, formatTime12h } from "@/lib/utils/date";
+import { formatISTDate, formatISTTime } from "@/lib/utils/date";
 
 export default async function PatientDashboardPage() {
   const session = await getSession();
@@ -91,7 +92,10 @@ export default async function PatientDashboardPage() {
                 </span>
               )}
             </div>
-            <AppointmentStatusBadge status={nextAppointment.status} />
+            <div className="flex items-center gap-2">
+              <AppointmentStatusBadge status={nextAppointment.status} />
+              <PaymentStatusBadge status={nextAppointment.payment_status} size="sm" />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-1 items-center">
@@ -117,7 +121,7 @@ export default async function PatientDashboardPage() {
                   <div className="flex items-center gap-1 text-ivory/80 font-mono text-[11px]">
                     <Clock className="w-3.5 h-3.5 text-terracotta" />
                     <span>
-                      {new Date(nextAppointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                      {formatISTTime(nextAppointment.availability?.start_time || nextAppointment.appointment_date)} IST
                     </span>
                   </div>
                 </div>
@@ -200,14 +204,15 @@ export default async function PatientDashboardPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-2.5 text-xs">
                   <div className="text-ink-muted">
                     <span className="font-medium text-ink">
                       {formatISTDate(app.appointment_date)}
                     </span>{" "}
-                    @ {new Date(app.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                    @ {formatISTTime(app.availability?.start_time || app.appointment_date)} IST
                   </div>
                   <AppointmentStatusBadge status={app.status} size="sm" />
+                  <PaymentStatusBadge status={app.payment_status} size="sm" />
                 </div>
               </div>
             ))}

@@ -2,6 +2,8 @@ import React from "react";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { AppointmentStatusBadge } from "@/components/appointments/AppointmentStatusBadge";
+import { PaymentStatusBadge } from "@/components/payments/PaymentStatusBadge";
+import { PayNowClientButton } from "@/components/payments/PayNowClientButton";
 import {
   CheckCircle2,
   Calendar,
@@ -11,6 +13,9 @@ import {
   ArrowRight,
   FileText,
   ShieldCheck,
+  CreditCard,
+  RotateCcw,
+  Info,
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
@@ -19,7 +24,7 @@ import { formatISTDate } from "@/lib/utils/date";
 export default async function BookingConfirmationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; doctor?: string }>;
+  searchParams: Promise<{ id?: string; doctor?: string; paid?: string }>;
 }) {
   const { id } = await searchParams;
   const appointmentId = id ? parseInt(id, 10) : null;
@@ -27,6 +32,17 @@ export default async function BookingConfirmationPage({
   const appointment = appointmentId
     ? await db.getAppointmentById(appointmentId)
     : null;
+
+  const payments = appointmentId
+    ? await db.getPaymentsForAppointment(appointmentId)
+    : [];
+
+  const refunds = appointmentId
+    ? await db.getRefundsForAppointment(appointmentId)
+    : [];
+
+  const latestPayment = payments[0] || null;
+  const latestRefund = refunds[0] || null;
 
   const docName =
     appointment?.doctor?.user?.full_name || "Medical Practitioner";
@@ -37,6 +53,8 @@ export default async function BookingConfirmationPage({
   const appTime = appointment?.availability
     ? `${appointment.availability.start_time.slice(0, 5)} – ${appointment.availability.end_time.slice(0, 5)} IST`
     : "Scheduled Time";
+
+  const paymentStatus = appointment?.payment_status || "unpaid";
 
   return (
     <div className="py-12 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -68,11 +86,12 @@ export default async function BookingConfirmationPage({
               </div>
             </div>
 
-            {appointment && (
-              <div>
+            <div className="flex items-center gap-2">
+              {appointment && (
                 <AppointmentStatusBadge status={appointment.status} />
-              </div>
-            )}
+              )}
+              <PaymentStatusBadge status={paymentStatus} />
+            </div>
           </div>
 
           {/* Consultation Summary Grid */}
@@ -110,18 +129,81 @@ export default async function BookingConfirmationPage({
             </div>
           </div>
 
-          {/* Consultation Fee Badge */}
-          {appointment?.doctor?.consultation_fee && (
-            <div className="p-4 rounded-lg bg-sage-light border border-sage-dark/70 flex items-center justify-between text-xs text-forest">
-              <span className="font-semibold flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-forest" />
-                <span>Consultation Fee:</span>
-              </span>
-              <span className="font-serif text-lg font-bold text-forest">
-                {formatINR(appointment.doctor.consultation_fee)}
-              </span>
+          {/* Payment & Receipt Information Banner */}
+          <div className="p-4 rounded-xl border border-warm-border bg-ivory-light space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-forest/10 flex items-center justify-center text-forest">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted block font-sans">
+                    Consultation Fee & Payment State
+                  </span>
+                  <div className="text-sm font-bold text-ink">
+                    {appointment?.doctor?.consultation_fee
+                      ? formatINR(appointment.doctor.consultation_fee)
+                      : "₹0"}
+                  </div>
+                </div>
+              </div>
+
+              {paymentStatus === "paid" ? (
+                <div className="flex items-center gap-2 text-xs text-emerald-800 font-semibold bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Payment Captured</span>
+                </div>
+              ) : appointmentId && appointment?.doctor?.consultation_fee ? (
+                <PayNowClientButton
+                  appointmentId={appointmentId}
+                  doctorName={docName}
+                  consultationFee={appointment.doctor.consultation_fee}
+                />
+              ) : null}
             </div>
-          )}
+
+            {/* Receipt Reference */}
+            {latestPayment && (
+              <div className="pt-3 border-t border-warm-border/60 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-muted">
+                <div>
+                  <span className="font-semibold text-ink">Transaction Ref: </span>
+                  <span className="font-mono text-ink">
+                    {latestPayment.provider_payment_id || latestPayment.provider_order_id}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-ink">Provider: </span>
+                  <span className="uppercase text-forest font-semibold">
+                    {latestPayment.provider}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Refund Reference if exists */}
+            {latestRefund && (
+              <div className="pt-2 border-t border-warm-border/60 flex items-center justify-between text-xs text-purple-900 bg-purple-50/50 p-2.5 rounded-lg">
+                <div className="flex items-center gap-1.5">
+                  <RotateCcw className="w-3.5 h-3.5 text-purple-600" />
+                  <span>
+                    Refund Issued: <strong>{formatINR(latestRefund.amount / 100)}</strong>
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] text-purple-700">
+                  {latestRefund.provider_refund_id || "Processed"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Cancellation Policy Banner */}
+          <div className="p-3.5 rounded-lg bg-sage/20 border border-warm-border flex items-start gap-2.5 text-xs text-forest">
+            <Info className="w-4 h-4 text-forest shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <span className="font-semibold text-forest">Medrella Cancellation & Refund Policy: </span>
+              Cancellations made 24+ hours in advance are eligible for a 100% full refund. Cancellations made between 2 and 24 hours prior receive a 50% partial refund.
+            </div>
+          </div>
 
           {/* Reason for consultation */}
           {appointment?.reason && (

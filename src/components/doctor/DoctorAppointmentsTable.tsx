@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Appointment, AppointmentStatus } from "@/types/database";
 import { AppointmentStatusBadge } from "@/components/appointments/AppointmentStatusBadge";
+import { PaymentStatusBadge } from "@/components/payments/PaymentStatusBadge";
 import { DoctorAppointmentActions } from "./DoctorAppointmentActions";
 import {
   Calendar,
@@ -182,8 +183,9 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <AppointmentStatusBadge status={app.status} size="sm" />
+                    <PaymentStatusBadge status={app.payment_status} size="sm" />
                     {(app.status === "pending" || app.status === "confirmed") && (
                       <button
                         type="button"

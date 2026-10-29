@@ -16,6 +16,14 @@ import {
   EarlySlotOffer,
   NotificationType,
   InAppNotification,
+  Payment,
+  PaymentStatus,
+  AppointmentPaymentStatus,
+  Refund,
+  RefundStatus,
+  WebhookEvent,
+  NotificationLog,
+  ScheduledReminder,
 } from "@/types/database";
 
 export const getDatabaseMode = (): "neon" | "local" => {
@@ -741,6 +749,7 @@ export const db = {
             availability_id: params.availabilityId,
             appointment_date: appointmentDate,
             status: "pending",
+            payment_status: "unpaid",
             reason: params.reason,
             wave_number: waveNum,
             estimated_consult_time: estConsult,
@@ -933,7 +942,10 @@ export const db = {
           with: {
             doctor: { with: { user: true } },
             availability: true,
+            payments: { with: { refunds: true } },
+            refunds: true,
           },
+          orderBy: [desc(schema.appointments.created_at)],
         });
         return rows as unknown as Appointment[];
       }
@@ -952,7 +964,10 @@ export const db = {
           with: {
             patient: { with: { user: true } },
             availability: true,
+            payments: { with: { refunds: true } },
+            refunds: true,
           },
+          orderBy: [desc(schema.appointments.created_at)],
         });
         return rows as unknown as Appointment[];
       }
@@ -972,6 +987,8 @@ export const db = {
             doctor: { with: { user: true } },
             patient: { with: { user: true } },
             availability: true,
+            payments: { with: { refunds: true } },
+            refunds: true,
           },
           limit: 1,
         });
@@ -1811,5 +1828,850 @@ export const db = {
       }
     }
     return localDb.completeConsultationAndCheckEarlyOffer(appointmentId, doctorUserId);
+  },
+
+  // =========================================================================
+  // DAY 4: PAYMENTS, REFUNDS, WEBHOOK IDEMPOTENCY & DURABLE REMINDERS
+  // =========================================================================
+
+  // --- Payments ---
+  createPayment: async (params: {
+    appointmentId: number;
+    patientId: number;
+    provider: string;
+    providerOrderId: string;
+    amount: number;
+    currency?: string;
+    idempotencyKey?: string;
+  }): Promise<Payment> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        if (params.idempotencyKey) {
+          const existing = await neonDb
+            .select()
+            .from(schema.payments)
+            .where(eq(schema.payments.idempotency_key, params.idempotencyKey))
+            .limit(1);
+          if (existing.length > 0) {
+            return {
+              ...existing[0],
+              status: existing[0].status as PaymentStatus,
+              created_at: existing[0].created_at.toISOString(),
+              updated_at: existing[0].updated_at.toISOString(),
+            };
+          }
+        }
+
+        const inserted = await neonDb
+          .insert(schema.payments)
+          .values({
+            appointment_id: params.appointmentId,
+            patient_id: params.patientId,
+            provider: params.provider || "razorpay",
+            provider_order_id: params.providerOrderId,
+            amount: params.amount,
+            currency: params.currency || "INR",
+            status: "pending",
+            idempotency_key: params.idempotencyKey || null,
+          })
+          .returning();
+
+        // Update appointment payment_status to pending if unpaid
+        await neonDb
+          .update(schema.appointments)
+          .set({ payment_status: "pending" })
+          .where(
+            and(
+              eq(schema.appointments.appointment_id, params.appointmentId),
+              eq(schema.appointments.payment_status, "unpaid")
+            )
+          );
+
+        const p = inserted[0];
+        return {
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+        };
+      }
+    }
+    return localDb.createPayment(params);
+  },
+
+  getPaymentById: async (paymentId: number): Promise<Payment | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.payments.findMany({
+          where: eq(schema.payments.payment_id, paymentId),
+          with: { refunds: true },
+          limit: 1,
+        });
+        if (rows.length === 0) return null;
+        const p = rows[0];
+        return {
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+          refunds: (p.refunds || []).map((r: any) => ({
+            ...r,
+            status: r.status as RefundStatus,
+            created_at: r.created_at.toISOString(),
+            processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+          })),
+        };
+      }
+    }
+    return localDb.getPaymentById(paymentId);
+  },
+
+  getPaymentByOrderId: async (orderId: string): Promise<Payment | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.payments.findMany({
+          where: eq(schema.payments.provider_order_id, orderId),
+          with: { refunds: true },
+          limit: 1,
+        });
+        if (rows.length === 0) return null;
+        const p = rows[0];
+        return {
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+          refunds: (p.refunds || []).map((r: any) => ({
+            ...r,
+            status: r.status as RefundStatus,
+            created_at: r.created_at.toISOString(),
+            processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+          })),
+        };
+      }
+    }
+    return localDb.getPaymentByOrderId(orderId);
+  },
+
+  getPaymentByProviderPaymentId: async (
+    providerPaymentId: string
+  ): Promise<Payment | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.payments.findMany({
+          where: eq(schema.payments.provider_payment_id, providerPaymentId),
+          with: { refunds: true },
+          limit: 1,
+        });
+        if (rows.length === 0) return null;
+        const p = rows[0];
+        return {
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+          refunds: (p.refunds || []).map((r: any) => ({
+            ...r,
+            status: r.status as RefundStatus,
+            created_at: r.created_at.toISOString(),
+            processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+          })),
+        };
+      }
+    }
+    return localDb.getPaymentByProviderPaymentId(providerPaymentId);
+  },
+
+  getPaymentsForAppointment: async (appointmentId: number): Promise<Payment[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.payments.findMany({
+          where: eq(schema.payments.appointment_id, appointmentId),
+          with: { refunds: true },
+          orderBy: [desc(schema.payments.created_at)],
+        });
+        return rows.map((p: any) => ({
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+          refunds: (p.refunds || []).map((r: any) => ({
+            ...r,
+            status: r.status as RefundStatus,
+            created_at: r.created_at.toISOString(),
+            processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+          })),
+        }));
+      }
+    }
+    return localDb.getPaymentsForAppointment(appointmentId);
+  },
+
+  getPaymentsForPatient: async (patientId: number): Promise<Payment[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb.query.payments.findMany({
+          where: eq(schema.payments.patient_id, patientId),
+          with: {
+            appointment: {
+              with: {
+                doctor: { with: { user: true } },
+                availability: true,
+              },
+            },
+            refunds: true,
+          },
+          orderBy: [desc(schema.payments.created_at)],
+        });
+        return rows.map((p: any) => ({
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+          appointment: p.appointment as unknown as Appointment,
+          refunds: (p.refunds || []).map((r: any) => ({
+            ...r,
+            status: r.status as RefundStatus,
+            created_at: r.created_at.toISOString(),
+            processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+          })),
+        }));
+      }
+    }
+    return localDb.getPaymentsForPatient(patientId);
+  },
+
+  updatePaymentStatus: async (params: {
+    paymentId: number;
+    status: PaymentStatus;
+    providerPaymentId?: string;
+    providerSignature?: string;
+    failureReason?: string;
+  }): Promise<Payment> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const updateValues: Record<string, any> = {
+          status: params.status,
+          updated_at: new Date(),
+        };
+        if (params.providerPaymentId) updateValues.provider_payment_id = params.providerPaymentId;
+        if (params.providerSignature) updateValues.provider_signature = params.providerSignature;
+        if (params.failureReason) updateValues.failure_reason = params.failureReason;
+
+        const updated = await neonDb
+          .update(schema.payments)
+          .set(updateValues)
+          .where(eq(schema.payments.payment_id, params.paymentId))
+          .returning();
+
+        if (updated.length === 0) throw new Error("Payment record not found");
+        const p = updated[0];
+
+        // Mirror to appointment payment_status & confirm appointment if captured
+        if (params.status === "captured") {
+          await neonDb
+            .update(schema.appointments)
+            .set({ payment_status: "paid", status: "confirmed" })
+            .where(eq(schema.appointments.appointment_id, p.appointment_id));
+        } else if (params.status === "failed") {
+          await neonDb
+            .update(schema.appointments)
+            .set({ payment_status: "failed" })
+            .where(eq(schema.appointments.appointment_id, p.appointment_id));
+        } else if (params.status === "refunded") {
+          await neonDb
+            .update(schema.appointments)
+            .set({ payment_status: "refunded" })
+            .where(eq(schema.appointments.appointment_id, p.appointment_id));
+        } else if (params.status === "partially_refunded") {
+          await neonDb
+            .update(schema.appointments)
+            .set({ payment_status: "partially_refunded" })
+            .where(eq(schema.appointments.appointment_id, p.appointment_id));
+        } else if (params.status === "abandoned") {
+          await neonDb
+            .update(schema.appointments)
+            .set({ payment_status: "unpaid" })
+            .where(eq(schema.appointments.appointment_id, p.appointment_id));
+        }
+
+        return {
+          ...p,
+          status: p.status as PaymentStatus,
+          created_at: p.created_at.toISOString(),
+          updated_at: p.updated_at.toISOString(),
+        };
+      }
+    }
+    return localDb.updatePaymentStatus(params);
+  },
+
+  updateAppointmentPaymentStatus: async (
+    appointmentId: number,
+    paymentStatus: AppointmentPaymentStatus
+  ): Promise<void> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        await neonDb
+          .update(schema.appointments)
+          .set({ payment_status: paymentStatus })
+          .where(eq(schema.appointments.appointment_id, appointmentId));
+        return;
+      }
+    }
+    return localDb.updateAppointmentPaymentStatus(appointmentId, paymentStatus);
+  },
+
+  // --- Refunds ---
+  createRefundRecord: async (params: {
+    paymentId: number;
+    appointmentId: number;
+    amount: number;
+    currency?: string;
+    reason: string;
+    policyApplied: string;
+    provider: string;
+    providerRefundId?: string;
+    idempotencyKey?: string;
+    status?: RefundStatus;
+    errorMessage?: string;
+  }): Promise<Refund> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        if (params.idempotencyKey) {
+          const existing = await neonDb
+            .select()
+            .from(schema.refunds)
+            .where(eq(schema.refunds.idempotency_key, params.idempotencyKey))
+            .limit(1);
+          if (existing.length > 0) {
+            const r = existing[0];
+            return {
+              ...r,
+              status: r.status as RefundStatus,
+              created_at: r.created_at.toISOString(),
+              processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+            };
+          }
+        }
+
+        const payment = await db.getPaymentById(params.paymentId);
+        if (!payment) throw new Error("Payment not found for refund creation");
+
+        // Sum prior non-failed refunds
+        const existingRefunds = await neonDb
+          .select()
+          .from(schema.refunds)
+          .where(
+            and(
+              eq(schema.refunds.payment_id, params.paymentId),
+              sql`${schema.refunds.status} != 'failed'`
+            )
+          );
+        const existingTotal = existingRefunds.reduce((sum, r) => sum + r.amount, 0);
+
+        if (existingTotal + params.amount > payment.amount) {
+          throw new Error(
+            `Refund amount (${params.amount}) exceeds captured payment ceiling (total: ${payment.amount}, already refunded: ${existingTotal}).`
+          );
+        }
+
+        const inserted = await neonDb
+          .insert(schema.refunds)
+          .values({
+            payment_id: params.paymentId,
+            appointment_id: params.appointmentId,
+            amount: params.amount,
+            currency: params.currency || "INR",
+            reason: params.reason,
+            policy_applied: params.policyApplied,
+            provider: params.provider || "razorpay",
+            provider_refund_id: params.providerRefundId || null,
+            idempotency_key: params.idempotencyKey || null,
+            status: params.status || "pending",
+            error_message: params.errorMessage || null,
+            processed_at: params.status === "processed" ? new Date() : null,
+          })
+          .returning();
+
+        const r = inserted[0];
+
+        // Update payment and appointment status if processed
+        if (params.status === "processed") {
+          const totalRefunded = existingTotal + params.amount;
+          const newStatus =
+            totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
+          await neonDb
+            .update(schema.payments)
+            .set({ status: newStatus, updated_at: new Date() })
+            .where(eq(schema.payments.payment_id, params.paymentId));
+          await neonDb
+            .update(schema.appointments)
+            .set({ payment_status: newStatus })
+            .where(eq(schema.appointments.appointment_id, params.appointmentId));
+        }
+
+        return {
+          ...r,
+          status: r.status as RefundStatus,
+          created_at: r.created_at.toISOString(),
+          processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+        };
+      }
+    }
+    return localDb.createRefundRecord(params);
+  },
+
+  getRefundsForPayment: async (paymentId: number): Promise<Refund[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select()
+          .from(schema.refunds)
+          .where(eq(schema.refunds.payment_id, paymentId))
+          .orderBy(desc(schema.refunds.created_at));
+        return rows.map((r) => ({
+          ...r,
+          status: r.status as RefundStatus,
+          created_at: r.created_at.toISOString(),
+          processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+        }));
+      }
+    }
+    return localDb.getRefundsForPayment(paymentId);
+  },
+
+  getRefundsForAppointment: async (appointmentId: number): Promise<Refund[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select()
+          .from(schema.refunds)
+          .where(eq(schema.refunds.appointment_id, appointmentId))
+          .orderBy(desc(schema.refunds.created_at));
+        return rows.map((r) => ({
+          ...r,
+          status: r.status as RefundStatus,
+          created_at: r.created_at.toISOString(),
+          processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+        }));
+      }
+    }
+    return localDb.getRefundsForAppointment(appointmentId);
+  },
+
+  updateRefundStatus: async (params: {
+    refundId: number;
+    status: RefundStatus;
+    providerRefundId?: string;
+    errorMessage?: string;
+  }): Promise<Refund> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const updateValues: Record<string, any> = {
+          status: params.status,
+        };
+        if (params.providerRefundId) updateValues.provider_refund_id = params.providerRefundId;
+        if (params.errorMessage) updateValues.error_message = params.errorMessage;
+        if (params.status === "processed") updateValues.processed_at = new Date();
+
+        const updated = await neonDb
+          .update(schema.refunds)
+          .set(updateValues)
+          .where(eq(schema.refunds.refund_id, params.refundId))
+          .returning();
+
+        if (updated.length === 0) throw new Error("Refund record not found");
+        const r = updated[0];
+
+        if (params.status === "processed") {
+          const payment = await db.getPaymentById(r.payment_id);
+          if (payment) {
+            const allProcessed = await neonDb
+              .select()
+              .from(schema.refunds)
+              .where(
+                and(
+                  eq(schema.refunds.payment_id, r.payment_id),
+                  eq(schema.refunds.status, "processed")
+                )
+              );
+            const totalRefunded = allProcessed.reduce((sum, ref) => sum + ref.amount, 0);
+            const newStatus =
+              totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
+            await neonDb
+              .update(schema.payments)
+              .set({ status: newStatus, updated_at: new Date() })
+              .where(eq(schema.payments.payment_id, r.payment_id));
+            await neonDb
+              .update(schema.appointments)
+              .set({ payment_status: newStatus })
+              .where(eq(schema.appointments.appointment_id, r.appointment_id));
+          }
+        }
+
+        return {
+          ...r,
+          status: r.status as RefundStatus,
+          created_at: r.created_at.toISOString(),
+          processed_at: r.processed_at ? r.processed_at.toISOString() : null,
+        };
+      }
+    }
+    return localDb.updateRefundStatus(params);
+  },
+
+  // --- Webhook Events (Idempotency) ---
+  recordWebhookEvent: async (params: {
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    payload: string;
+    status?: "processing" | "processed" | "failed";
+    errorMessage?: string;
+  }): Promise<WebhookEvent> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const existing = await neonDb
+          .select()
+          .from(schema.webhookEvents)
+          .where(
+            and(
+              eq(schema.webhookEvents.provider, params.provider),
+              eq(schema.webhookEvents.provider_event_id, params.providerEventId)
+            )
+          )
+          .limit(1);
+        if (existing.length > 0) {
+          const e = existing[0];
+          return {
+            ...e,
+            status: e.status as "processing" | "processed" | "failed",
+            created_at: e.created_at.toISOString(),
+          };
+        }
+
+        const inserted = await neonDb
+          .insert(schema.webhookEvents)
+          .values({
+            provider: params.provider,
+            provider_event_id: params.providerEventId,
+            event_type: params.eventType,
+            payload: params.payload,
+            status: params.status || "processed",
+            error_message: params.errorMessage || null,
+          })
+          .returning();
+
+        const e = inserted[0];
+        return {
+          ...e,
+          status: e.status as "processing" | "processed" | "failed",
+          created_at: e.created_at.toISOString(),
+        };
+      }
+    }
+    return localDb.recordWebhookEvent(params);
+  },
+
+  getWebhookEvent: async (
+    provider: string,
+    providerEventId: string
+  ): Promise<WebhookEvent | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select()
+          .from(schema.webhookEvents)
+          .where(
+            and(
+              eq(schema.webhookEvents.provider, provider),
+              eq(schema.webhookEvents.provider_event_id, providerEventId)
+            )
+          )
+          .limit(1);
+        if (rows.length === 0) return null;
+        const e = rows[0];
+        return {
+          ...e,
+          status: e.status as "processing" | "processed" | "failed",
+          created_at: e.created_at.toISOString(),
+        };
+      }
+    }
+    return localDb.getWebhookEvent(provider, providerEventId);
+  },
+
+  // --- Notification Logs ---
+  createNotificationLog: async (params: {
+    userId: number;
+    recipientEmail: string;
+    channel?: "email" | "sms" | "whatsapp";
+    eventType: string;
+    subject: string;
+    appointmentId?: number | null;
+    status?: "pending" | "sent" | "delivered" | "failed" | "simulated";
+    provider?: string;
+    providerMessageId?: string;
+    idempotencyKey?: string;
+    errorMessage?: string;
+  }): Promise<NotificationLog> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        if (params.idempotencyKey) {
+          const existing = await neonDb
+            .select()
+            .from(schema.notificationLogs)
+            .where(eq(schema.notificationLogs.idempotency_key, params.idempotencyKey))
+            .limit(1);
+          if (existing.length > 0) {
+            const l = existing[0];
+            return {
+              ...l,
+              channel: l.channel as "email" | "sms" | "whatsapp",
+              status: l.status as any,
+              created_at: l.created_at.toISOString(),
+            };
+          }
+        }
+
+        const inserted = await neonDb
+          .insert(schema.notificationLogs)
+          .values({
+            user_id: params.userId,
+            recipient_email: params.recipientEmail,
+            channel: params.channel || "email",
+            event_type: params.eventType,
+            subject: params.subject,
+            appointment_id: params.appointmentId || null,
+            status: params.status || "delivered",
+            provider: params.provider || "console",
+            provider_message_id: params.providerMessageId || null,
+            idempotency_key: params.idempotencyKey || null,
+            error_message: params.errorMessage || null,
+          })
+          .returning();
+
+        const l = inserted[0];
+        return {
+          ...l,
+          channel: l.channel as "email" | "sms" | "whatsapp",
+          status: l.status as any,
+          created_at: l.created_at.toISOString(),
+        };
+      }
+    }
+    return localDb.createNotificationLog(params);
+  },
+
+  getNotificationLogByIdempotency: async (
+    idempotencyKey: string
+  ): Promise<NotificationLog | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select()
+          .from(schema.notificationLogs)
+          .where(eq(schema.notificationLogs.idempotency_key, idempotencyKey))
+          .limit(1);
+        if (rows.length === 0) return null;
+        const l = rows[0];
+        return {
+          ...l,
+          channel: l.channel as "email" | "sms" | "whatsapp",
+          status: l.status as any,
+          created_at: l.created_at.toISOString(),
+        };
+      }
+    }
+    return localDb.getNotificationLogByIdempotency(idempotencyKey);
+  },
+
+  createInAppNotification: async (params: {
+    userId: number;
+    title: string;
+    message: string;
+    type?: NotificationType;
+    relatedOfferId?: number | null;
+  }): Promise<InAppNotification> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const inserted = await neonDb
+          .insert(schema.notifications)
+          .values({
+            user_id: params.userId,
+            title: params.title,
+            message: params.message,
+            type: params.type || "general",
+            related_offer_id: params.relatedOfferId || null,
+            is_read: false,
+          })
+          .returning();
+        const n = inserted[0];
+        return {
+          ...n,
+          type: n.type as NotificationType,
+          created_at: n.created_at.toISOString(),
+        };
+      }
+    }
+    return localDb.createInAppNotification(params);
+  },
+
+  // --- Scheduled Reminders ---
+  upsertScheduledReminder: async (params: {
+    appointmentId: number;
+    reminderType: string;
+    scheduledFor: Date | string;
+  }): Promise<ScheduledReminder> => {
+    const scheduledDate =
+      params.scheduledFor instanceof Date
+        ? params.scheduledFor
+        : new Date(params.scheduledFor);
+
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const existing = await neonDb
+          .select()
+          .from(schema.scheduledReminders)
+          .where(
+            and(
+              eq(schema.scheduledReminders.appointment_id, params.appointmentId),
+              eq(schema.scheduledReminders.reminder_type, params.reminderType)
+            )
+          )
+          .limit(1);
+
+        if (existing.length > 0) {
+          const updated = await neonDb
+            .update(schema.scheduledReminders)
+            .set({
+              scheduled_for: scheduledDate,
+              status: "scheduled",
+              updated_at: new Date(),
+            })
+            .where(
+              eq(schema.scheduledReminders.reminder_id, existing[0].reminder_id)
+            )
+            .returning();
+          const r = updated[0];
+          return {
+            ...r,
+            status: r.status as any,
+            scheduled_for: r.scheduled_for.toISOString(),
+            sent_at: r.sent_at ? r.sent_at.toISOString() : null,
+            created_at: r.created_at.toISOString(),
+            updated_at: r.updated_at.toISOString(),
+          };
+        }
+
+        const inserted = await neonDb
+          .insert(schema.scheduledReminders)
+          .values({
+            appointment_id: params.appointmentId,
+            reminder_type: params.reminderType,
+            scheduled_for: scheduledDate,
+            status: "scheduled",
+          })
+          .returning();
+
+        const r = inserted[0];
+        return {
+          ...r,
+          status: r.status as any,
+          scheduled_for: r.scheduled_for.toISOString(),
+          sent_at: r.sent_at ? r.sent_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+          updated_at: r.updated_at.toISOString(),
+        };
+      }
+    }
+    return localDb.upsertScheduledReminder(params);
+  },
+
+  cancelRemindersForAppointment: async (appointmentId: number): Promise<void> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        await neonDb
+          .update(schema.scheduledReminders)
+          .set({ status: "cancelled", updated_at: new Date() })
+          .where(
+            and(
+              eq(schema.scheduledReminders.appointment_id, appointmentId),
+              eq(schema.scheduledReminders.status, "scheduled")
+            )
+          );
+        return;
+      }
+    }
+    return localDb.cancelRemindersForAppointment(appointmentId);
+  },
+
+  getDueScheduledReminders: async (): Promise<ScheduledReminder[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select()
+          .from(schema.scheduledReminders)
+          .where(
+            and(
+              eq(schema.scheduledReminders.status, "scheduled"),
+              sql`${schema.scheduledReminders.scheduled_for} <= NOW()`
+            )
+          );
+        return rows.map((r) => ({
+          ...r,
+          status: r.status as any,
+          scheduled_for: r.scheduled_for.toISOString(),
+          sent_at: r.sent_at ? r.sent_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+          updated_at: r.updated_at.toISOString(),
+        }));
+      }
+    }
+    return localDb.getDueScheduledReminders();
+  },
+
+  updateReminderStatus: async (
+    reminderId: number,
+    status: "scheduled" | "sent" | "cancelled" | "failed",
+    errorMessage?: string
+  ): Promise<void> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        await neonDb
+          .update(schema.scheduledReminders)
+          .set({
+            status,
+            sent_at: status === "sent" ? new Date() : null,
+            error_message: errorMessage || null,
+            updated_at: new Date(),
+          })
+          .where(eq(schema.scheduledReminders.reminder_id, reminderId));
+        return;
+      }
+    }
+    return localDb.updateReminderStatus(reminderId, status, errorMessage);
   },
 };

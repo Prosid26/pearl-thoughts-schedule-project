@@ -66,6 +66,7 @@ export interface Appointment {
   availability_id: number;
   appointment_date: string; // ISO datetime
   status: AppointmentStatus;
+  payment_status?: AppointmentPaymentStatus;
   reason: string;
   rescheduled_from_id?: number | null;
   wave_number?: number | null;
@@ -74,6 +75,8 @@ export interface Appointment {
   patient?: Patient & { user?: Pick<User, "full_name" | "email" | "phone"> };
   doctor?: Doctor & { user?: Pick<User, "full_name" | "email" | "phone"> };
   availability?: Availability;
+  payments?: Payment[];
+  refunds?: Refund[];
 }
 
 export interface SessionUser {
@@ -150,4 +153,97 @@ export interface InAppNotification {
   is_read: boolean;
   created_at: string;
   offer?: EarlySlotOffer;
+}
+
+export type PaymentStatus =
+  | "pending"
+  | "captured"
+  | "failed"
+  | "abandoned"
+  | "refunded"
+  | "partially_refunded";
+
+export type AppointmentPaymentStatus =
+  | "unpaid"
+  | "pending"
+  | "paid"
+  | "partially_refunded"
+  | "refunded"
+  | "failed";
+
+export type RefundStatus = "pending" | "processed" | "failed";
+
+export interface Payment {
+  payment_id: number;
+  appointment_id: number;
+  patient_id: number;
+  provider: string; // 'razorpay' | 'stripe' | 'mock'
+  provider_order_id: string;
+  provider_payment_id?: string | null;
+  provider_signature?: string | null;
+  amount: number; // in minor units / paise (e.g. 100000 = ₹1,000)
+  currency: string; // 'INR'
+  status: PaymentStatus;
+  idempotency_key?: string | null;
+  failure_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  appointment?: Appointment;
+  refunds?: Refund[];
+}
+
+export interface Refund {
+  refund_id: number;
+  payment_id: number;
+  appointment_id: number;
+  amount: number; // in minor units / paise
+  currency: string;
+  reason: string;
+  policy_applied: string;
+  provider: string;
+  provider_refund_id?: string | null;
+  idempotency_key?: string | null;
+  status: RefundStatus;
+  error_message?: string | null;
+  created_at: string;
+  processed_at?: string | null;
+}
+
+export interface WebhookEvent {
+  event_id: number;
+  provider: string;
+  provider_event_id: string;
+  event_type: string;
+  payload: string;
+  status: "processing" | "processed" | "failed";
+  error_message?: string | null;
+  created_at: string;
+}
+
+export interface NotificationLog {
+  delivery_id: number;
+  user_id: number;
+  recipient_email: string;
+  channel: "email" | "sms" | "whatsapp";
+  event_type: string;
+  subject: string;
+  appointment_id?: number | null;
+  status: "pending" | "sent" | "delivered" | "failed" | "simulated";
+  provider: string;
+  provider_message_id?: string | null;
+  idempotency_key?: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
+export interface ScheduledReminder {
+  reminder_id: number;
+  appointment_id: number;
+  reminder_type: string; // '24h_before' | '2h_before'
+  scheduled_for: string; // ISO datetime
+  status: "scheduled" | "sent" | "cancelled" | "failed";
+  sent_at?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
 }

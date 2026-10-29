@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import { Appointment } from "@/types/database";
 import { AppointmentStatusBadge } from "@/components/appointments/AppointmentStatusBadge";
+import { PaymentStatusBadge } from "@/components/payments/PaymentStatusBadge";
+import { PaymentCheckoutModal } from "@/components/payments/PaymentCheckoutModal";
 import { cancelAppointmentAction } from "@/app/actions/appointment.actions";
 import {
   Calendar,
@@ -12,10 +14,13 @@ import {
   Loader2,
   RotateCcw,
   Layers,
+  CreditCard,
+  Receipt,
+  ShieldAlert,
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
-import { formatISTDate } from "@/lib/utils/date";
+import { formatISTDate, formatISTTime } from "@/lib/utils/date";
 import { RescheduleModal } from "@/components/appointments/RescheduleModal";
 
 interface Props {
@@ -30,6 +35,8 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
   >("all");
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [reschedulingAppointment, setReschedulingAppointment] =
+    useState<Appointment | null>(null);
+  const [payingAppointment, setPayingAppointment] =
     useState<Appointment | null>(null);
 
   const handleCancel = async (appointmentId: number) => {
@@ -136,12 +143,8 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
             const isEligibleForChange =
               app.status === "pending" || app.status === "confirmed";
             const dateStr = formatISTDate(app.appointment_date);
-            const timeStr = new Date(app.appointment_date).toLocaleTimeString(
-              [],
-              {
-                hour: "2-digit",
-                minute: "2-digit",
-              }
+            const timeStr = formatISTTime(
+              app.availability?.start_time || app.appointment_date
             );
 
             return (
@@ -157,11 +160,12 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
                     size="lg"
                   />
                   <div className="space-y-1.5">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-serif text-lg font-medium text-ink">
                         {app.doctor?.user?.full_name || "Doctor"}
                       </h4>
                       <AppointmentStatusBadge status={app.status} size="sm" />
+                      <PaymentStatusBadge status={app.payment_status} size="sm" />
                     </div>
 
                     <p className="text-xs text-muted-text">
@@ -189,7 +193,7 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sage/30 border border-warm-border text-[11px] text-forest font-medium">
                         <Layers className="w-3 h-3 text-forest" />
                         <span>
-                          Wave Cohort #{app.wave_number} • Est. Consult: {app.estimated_consult_time || timeStr} IST
+                          Wave Cohort #{app.wave_number} • Est. Consult: {formatISTTime(app.estimated_consult_time) || timeStr} IST
                         </span>
                       </div>
                     )}
@@ -206,12 +210,53 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
                         <span>{app.doctor.clinic_address}</span>
                       </div>
                     )}
+
+                    {/* Payment Receipt / Reference if available */}
+                    {app.payments && app.payments.length > 0 && (
+                      <div className="pt-1 flex items-center gap-2 text-[11px] text-ink-muted">
+                        <Receipt className="w-3 h-3 text-forest shrink-0" />
+                        <span>Receipt Ref: <strong className="font-mono">{app.payments[0].provider_payment_id || app.payments[0].provider_order_id}</strong></span>
+                      </div>
+                    )}
+
+                    {/* Clear distinction: Appointment Cancellation vs Refund Completion */}
+                    {(app.status === "cancelled" || app.status === "rejected") && (
+                      <div className="mt-2 p-2.5 rounded-lg bg-ivory-light border border-warm-border text-xs">
+                        {app.refunds && app.refunds.length > 0 ? (
+                          <div className="space-y-0.5">
+                            <div className="font-semibold text-purple-900 flex items-center gap-1.5">
+                              <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
+                              <span>Refund: {app.refunds[0].status.toUpperCase()} ({formatINR(app.refunds[0].amount / 100)})</span>
+                            </div>
+                            <p className="text-[11px] text-ink-muted">
+                              Policy: {app.refunds[0].policy_applied} • Provider Ref: {app.refunds[0].provider_refund_id || "Processed"}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-ink-muted flex items-center gap-1.5">
+                            <ShieldAlert className="w-3.5 h-3.5 text-ink-muted" />
+                            <span>Slot cancelled & released. Refund: Ineligible or cancelled within 2h window per policy.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2.5 self-end md:self-center border-t md:border-t-0 pt-3 md:pt-0 w-full md:w-auto justify-end">
                   {isEligibleForChange && (
                     <>
+                      {app.payment_status !== "paid" && (
+                        <button
+                          type="button"
+                          onClick={() => setPayingAppointment(app)}
+                          className="btn-forest inline-flex items-center gap-1.5 text-xs cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5 text-sage" />
+                          <span>Pay Online</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setReschedulingAppointment(app)}
@@ -266,6 +311,27 @@ export function PatientAppointmentsList({ initialAppointments }: Props) {
           isOpen={Boolean(reschedulingAppointment)}
           onClose={() => setReschedulingAppointment(null)}
           onSuccess={() => setReschedulingAppointment(null)}
+        />
+      )}
+
+      {/* Payment Checkout Modal */}
+      {payingAppointment && (
+        <PaymentCheckoutModal
+          appointmentId={payingAppointment.appointment_id}
+          doctorName={payingAppointment.doctor?.user?.full_name || "Doctor"}
+          consultationFee={payingAppointment.doctor?.consultation_fee || 500}
+          isOpen={Boolean(payingAppointment)}
+          onClose={() => setPayingAppointment(null)}
+          onSuccess={() => {
+            setAppointments((prev) =>
+              prev.map((a) =>
+                a.appointment_id === payingAppointment.appointment_id
+                  ? { ...a, payment_status: "paid", status: "confirmed" }
+                  : a
+              )
+            );
+            setPayingAppointment(null);
+          }}
         />
       )}
     </div>

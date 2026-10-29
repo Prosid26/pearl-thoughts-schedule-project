@@ -17,7 +17,7 @@ import {
   MapPin,
   ArrowRight,
 } from "lucide-react";
-import { formatTime12h, formatCountdown, getRemainingSeconds } from "@/lib/utils/date";
+import { formatTime12h, formatISTTime, formatCountdown, getRemainingSeconds } from "@/lib/utils/date";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -178,7 +178,7 @@ export function EarlySlotOfferBanner({ initialOffer = null }: Props) {
               <div className="pt-2 flex flex-wrap items-center gap-2.5 text-xs">
                 {offer.original_appointment && (
                   <div className="px-3 py-1 rounded-md bg-[#1D3128] border border-warm-border/20 text-[#8EA094] line-through text-[11px]">
-                    Original: {new Date(offer.original_appointment.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                    Original: {formatISTTime(offer.original_appointment.availability?.start_time || offer.original_appointment.appointment_date)} IST
                   </div>
                 )}
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#182821] border border-terracotta/50 text-white font-medium text-xs">

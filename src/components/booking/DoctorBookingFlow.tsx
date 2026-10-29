@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatINR } from "@/lib/utils/currency";
+import { PaymentCheckoutModal } from "@/components/payments/PaymentCheckoutModal";
 
 interface Props {
   doctor: Doctor;
@@ -39,6 +40,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [paymentAppointmentId, setPaymentAppointmentId] = useState<number | null>(null);
 
   const slotsForDate = availabilities.filter(
     (a) => a.available_date === selectedDate
@@ -72,11 +74,9 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
     try {
       const res = await bookAppointmentAction(null, formData);
       if (res.success && res.data?.appointmentId) {
-        router.push(
-          `/booking-confirmation?id=${res.data.appointmentId}&doctor=${encodeURIComponent(
-            doctor.user?.full_name || "Doctor"
-          )}`
-        );
+        // Open payment modal
+        setPaymentAppointmentId(res.data.appointmentId);
+        setIsSubmitting(false);
       } else {
         setErrorMessage(
           res.error || "Failed to book appointment. Please try again."
@@ -316,7 +316,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="btn-forest w-full py-3.5 text-sm font-bold shadow-sm flex items-center justify-center gap-2"
+                    className="btn-forest w-full py-3.5 text-sm font-bold shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isSubmitting ? (
                       <>
@@ -327,7 +327,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                       <>
                         <CheckCircle2 className="w-4 h-4 text-sage" />
                         <span>
-                          Confirm Appointment ({formatINR(doctor.consultation_fee)})
+                          Proceed to Payment ({formatINR(doctor.consultation_fee)})
                         </span>
                       </>
                     )}
@@ -382,6 +382,34 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
           Instant atomic slot locking guarantees zero double bookings or schedule collisions.
         </span>
       </div>
+
+      {/* Online Payment Modal */}
+      {paymentAppointmentId && (
+        <PaymentCheckoutModal
+          appointmentId={paymentAppointmentId}
+          doctorName={doctor.user?.full_name || "Specialist"}
+          consultationFee={doctor.consultation_fee}
+          isOpen={Boolean(paymentAppointmentId)}
+          onClose={() => {
+            const aptId = paymentAppointmentId;
+            setPaymentAppointmentId(null);
+            router.push(
+              `/booking-confirmation?id=${aptId}&doctor=${encodeURIComponent(
+                doctor.user?.full_name || "Doctor"
+              )}`
+            );
+          }}
+          onSuccess={() => {
+            const aptId = paymentAppointmentId;
+            setPaymentAppointmentId(null);
+            router.push(
+              `/booking-confirmation?id=${aptId}&doctor=${encodeURIComponent(
+                doctor.user?.full_name || "Doctor"
+              )}&paid=true`
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
