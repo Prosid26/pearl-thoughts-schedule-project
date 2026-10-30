@@ -76,51 +76,69 @@ export async function bookAppointmentAction(
       : "Scheduled Window";
     const bookingRef = `#APT-${String(appointment.appointment_id).padStart(5, "0")}`;
 
+    // Resolve patient phone (fallback to direct user record if not populated on relation)
+    let patientPhone = appointment.patient?.user?.phone;
+    if (!patientPhone && session.user_id) {
+      const patientUser = await db.getUserById(session.user_id);
+      patientPhone = patientUser?.phone;
+    }
+
+    const notifPromises: Promise<unknown>[] = [];
+
     // 1. Notify Patient
     if (session.email) {
-      sendClinicalNotification("booking_confirmed", {
-        recipientEmail: session.email,
-        recipientPhone: appointment.patient?.user?.phone,
-        recipientName: session.full_name,
-        userId: session.user_id,
-        appointmentId: appointment.appointment_id,
-        bookingRef,
-        doctorName: appointment.doctor?.user?.full_name || "Doctor",
-        specialization: appointment.doctor?.specialization || "Specialist",
-        appointmentDate: appointment.appointment_date,
-        appointmentTimeStr: appTime,
-        clinicAddress: appointment.doctor?.clinic_address,
-        paymentStatus: appointment.payment_status || "unpaid",
-        idempotencyKey: `notif_book_${appointment.appointment_id}`,
-      }).catch((err) => console.warn("Async booking notif error:", err));
+      notifPromises.push(
+        sendClinicalNotification("booking_confirmed", {
+          recipientEmail: session.email,
+          recipientPhone: patientPhone,
+          recipientName: session.full_name,
+          userId: session.user_id,
+          appointmentId: appointment.appointment_id,
+          bookingRef,
+          doctorName: appointment.doctor?.user?.full_name || "Doctor",
+          specialization: appointment.doctor?.specialization || "Specialist",
+          appointmentDate: appointment.appointment_date,
+          appointmentTimeStr: appTime,
+          clinicAddress: appointment.doctor?.clinic_address,
+          paymentStatus: appointment.payment_status || "unpaid",
+          idempotencyKey: `notif_book_${appointment.appointment_id}`,
+        }).catch((err) => console.warn("Booking notification error (patient):", err))
+      );
     }
 
     // 2. Notify Assigned Doctor
     const doctorUser = appointment.doctor?.user;
     if (doctorUser?.email) {
-      sendClinicalNotification("doctor_booking_alert", {
-        recipientEmail: doctorUser.email,
-        recipientPhone: doctorUser.phone,
-        recipientName: doctorUser.full_name || "Doctor",
-        userId: appointment.doctor?.user_id || 0,
-        appointmentId: appointment.appointment_id,
-        bookingRef,
-        doctorName: doctorUser.full_name || "Doctor",
-        patientName: session.full_name,
-        patientPhone: appointment.patient?.user?.phone,
-        specialization: appointment.doctor?.specialization || "Specialist",
-        appointmentDate: appointment.appointment_date,
-        appointmentTimeStr: appTime,
-        clinicAddress: appointment.doctor?.clinic_address,
-        customNotes: reason,
-        idempotencyKey: `notif_doc_book_${appointment.appointment_id}`,
-      }).catch((err) => console.warn("Async doc booking alert error:", err));
+      notifPromises.push(
+        sendClinicalNotification("doctor_booking_alert", {
+          recipientEmail: doctorUser.email,
+          recipientPhone: doctorUser.phone,
+          recipientName: doctorUser.full_name || "Doctor",
+          userId: appointment.doctor?.user_id || 0,
+          appointmentId: appointment.appointment_id,
+          bookingRef,
+          doctorName: doctorUser.full_name || "Doctor",
+          patientName: session.full_name,
+          patientPhone: patientPhone,
+          specialization: appointment.doctor?.specialization || "Specialist",
+          appointmentDate: appointment.appointment_date,
+          appointmentTimeStr: appTime,
+          clinicAddress: appointment.doctor?.clinic_address,
+          customNotes: reason,
+          idempotencyKey: `notif_doc_book_${appointment.appointment_id}`,
+        }).catch((err) => console.warn("Booking notification error (doctor):", err))
+      );
     }
 
     // Schedule reminders
-    scheduleAppointmentReminders(appointment.appointment_id).catch((err) =>
-      console.warn("Async reminder schedule error:", err)
+    notifPromises.push(
+      scheduleAppointmentReminders(appointment.appointment_id).catch((err) =>
+        console.warn("Async reminder schedule error:", err)
+      )
     );
+
+    // Wait for all dispatches before responding so Vercel Serverless container does not terminate mid-flight
+    await Promise.allSettled(notifPromises);
 
     // Revalidate affected views
     revalidatePath("/patient/appointments");
@@ -262,56 +280,65 @@ export async function updateAppointmentStatusAction(
         ? `${updatedApp.availability.start_time.slice(0, 5)} – ${updatedApp.availability.end_time.slice(0, 5)} IST`
         : "";
 
+      const cancelNotifs: Promise<unknown>[] = [];
+
       // 3a. Notify Patient
       const patientUser = updatedApp.patient?.user;
       if (patientUser?.email) {
-        sendClinicalNotification("appointment_cancelled", {
-          recipientEmail: patientUser.email,
-          recipientPhone: patientUser.phone,
-          recipientName: patientUser.full_name || "Patient",
-          userId: updatedApp.patient?.user_id || updatedApp.patient_id,
-          appointmentId: updatedApp.appointment_id,
-          bookingRef,
-          doctorName: updatedApp.doctor?.user?.full_name || "Doctor",
-          specialization: updatedApp.doctor?.specialization || "Specialist",
-          appointmentDate: updatedApp.appointment_date,
-          appointmentTimeStr: appTimeStr,
-          refundAmountFormatted: refundOutcome
-            ? formatINR(refundOutcome.amount / 100)
-            : undefined,
-          refundReason: refundOutcome?.policyApplied,
-          cancellationReason:
-            session.role === "doctor"
-              ? "Cancelled by doctor"
-              : "Cancelled by patient",
-          cancelledBy: session.role === "doctor" ? "doctor" : "patient",
-          idempotencyKey: `notif_cancel_${updatedApp.appointment_id}`,
-        }).catch((err) => console.warn("Async cancel notif error:", err));
+        cancelNotifs.push(
+          sendClinicalNotification("appointment_cancelled", {
+            recipientEmail: patientUser.email,
+            recipientPhone: patientUser.phone,
+            recipientName: patientUser.full_name || "Patient",
+            userId: updatedApp.patient?.user_id || updatedApp.patient_id,
+            appointmentId: updatedApp.appointment_id,
+            bookingRef,
+            doctorName: updatedApp.doctor?.user?.full_name || "Doctor",
+            specialization: updatedApp.doctor?.specialization || "Specialist",
+            appointmentDate: updatedApp.appointment_date,
+            appointmentTimeStr: appTimeStr,
+            refundAmountFormatted: refundOutcome
+              ? formatINR(refundOutcome.amount / 100)
+              : undefined,
+            refundReason: refundOutcome?.policyApplied,
+            cancellationReason:
+              session.role === "doctor"
+                ? "Cancelled by doctor"
+                : "Cancelled by patient",
+            cancelledBy: session.role === "doctor" ? "doctor" : "patient",
+            idempotencyKey: `notif_cancel_${updatedApp.appointment_id}`,
+          }).catch((err) => console.warn("Cancel notification error (patient):", err))
+        );
       }
 
       // 3b. Notify Assigned Doctor
       const doctorUser = updatedApp.doctor?.user;
       if (doctorUser?.email) {
-        sendClinicalNotification("doctor_cancellation_alert", {
-          recipientEmail: doctorUser.email,
-          recipientPhone: doctorUser.phone,
-          recipientName: doctorUser.full_name || "Doctor",
-          userId: updatedApp.doctor?.user_id || 0,
-          appointmentId: updatedApp.appointment_id,
-          bookingRef,
-          doctorName: doctorUser.full_name || "Doctor",
-          patientName: patientUser?.full_name || "Patient",
-          specialization: updatedApp.doctor?.specialization || "Specialist",
-          appointmentDate: updatedApp.appointment_date,
-          appointmentTimeStr: appTimeStr,
-          cancellationReason:
-            session.role === "doctor"
-              ? "Cancelled by doctor"
-              : "Cancelled by patient",
-          cancelledBy: session.role === "doctor" ? "doctor" : "patient",
-          idempotencyKey: `notif_doc_cancel_${updatedApp.appointment_id}`,
-        }).catch((err) => console.warn("Async doc cancel alert error:", err));
+        cancelNotifs.push(
+          sendClinicalNotification("doctor_cancellation_alert", {
+            recipientEmail: doctorUser.email,
+            recipientPhone: doctorUser.phone,
+            recipientName: doctorUser.full_name || "Doctor",
+            userId: updatedApp.doctor?.user_id || 0,
+            appointmentId: updatedApp.appointment_id,
+            bookingRef,
+            doctorName: doctorUser.full_name || "Doctor",
+            patientName: patientUser?.full_name || "Patient",
+            specialization: updatedApp.doctor?.specialization || "Specialist",
+            appointmentDate: updatedApp.appointment_date,
+            appointmentTimeStr: appTimeStr,
+            cancellationReason:
+              session.role === "doctor"
+                ? "Cancelled by doctor"
+                : "Cancelled by patient",
+            cancelledBy: session.role === "doctor" ? "doctor" : "patient",
+            idempotencyKey: `notif_doc_cancel_${updatedApp.appointment_id}`,
+          }).catch((err) => console.warn("Cancel notification error (doctor):", err))
+        );
       }
+
+      // Wait for all cancellation notifications before returning
+      await Promise.allSettled(cancelNotifs);
     }
 
     revalidatePath("/doctor/dashboard");
@@ -382,48 +409,57 @@ export async function rescheduleAppointmentAction(
       ? `${updated.availability.start_time.slice(0, 5)} – ${updated.availability.end_time.slice(0, 5)} IST`
       : "Scheduled Window";
 
+    const reschedNotifs: Promise<unknown>[] = [];
+
     // 1. Notify Patient
     const patientUser = updated.patient?.user;
     if (patientUser?.email) {
-      sendClinicalNotification("appointment_rescheduled", {
-        recipientEmail: patientUser.email,
-        recipientPhone: patientUser.phone,
-        recipientName: patientUser.full_name || "Patient",
-        userId: updated.patient?.user_id || updated.patient_id,
-        appointmentId: updated.appointment_id,
-        bookingRef,
-        doctorName: updated.doctor?.user?.full_name || "Doctor",
-        specialization: updated.doctor?.specialization || "Specialist",
-        appointmentDate: updated.appointment_date,
-        appointmentTimeStr: newAppTime,
-        previousDate: prevDate,
-        previousTimeStr: prevTimeStr,
-        clinicAddress: updated.doctor?.clinic_address,
-        idempotencyKey: `notif_resched_${updated.appointment_id}_${Date.now()}`,
-      }).catch((err) => console.warn("Async reschedule notif error:", err));
+      reschedNotifs.push(
+        sendClinicalNotification("appointment_rescheduled", {
+          recipientEmail: patientUser.email,
+          recipientPhone: patientUser.phone,
+          recipientName: patientUser.full_name || "Patient",
+          userId: updated.patient?.user_id || updated.patient_id,
+          appointmentId: updated.appointment_id,
+          bookingRef,
+          doctorName: updated.doctor?.user?.full_name || "Doctor",
+          specialization: updated.doctor?.specialization || "Specialist",
+          appointmentDate: updated.appointment_date,
+          appointmentTimeStr: newAppTime,
+          previousDate: prevDate,
+          previousTimeStr: prevTimeStr,
+          clinicAddress: updated.doctor?.clinic_address,
+          idempotencyKey: `notif_resched_${updated.appointment_id}_${Date.now()}`,
+        }).catch((err) => console.warn("Reschedule notification error (patient):", err))
+      );
     }
 
     // 2. Notify Doctor
     const doctorUser = updated.doctor?.user;
     if (doctorUser?.email) {
-      sendClinicalNotification("doctor_reschedule_alert", {
-        recipientEmail: doctorUser.email,
-        recipientPhone: doctorUser.phone,
-        recipientName: doctorUser.full_name || "Doctor",
-        userId: updated.doctor?.user_id || 0,
-        appointmentId: updated.appointment_id,
-        bookingRef,
-        doctorName: doctorUser.full_name || "Doctor",
-        patientName: patientUser?.full_name || "Patient",
-        specialization: updated.doctor?.specialization || "Specialist",
-        appointmentDate: updated.appointment_date,
-        appointmentTimeStr: newAppTime,
-        previousDate: prevDate,
-        previousTimeStr: prevTimeStr,
-        customNotes: reason || "Rescheduled by patient",
-        idempotencyKey: `notif_doc_resched_${updated.appointment_id}_${Date.now()}`,
-      }).catch((err) => console.warn("Async doc reschedule alert error:", err));
+      reschedNotifs.push(
+        sendClinicalNotification("doctor_reschedule_alert", {
+          recipientEmail: doctorUser.email,
+          recipientPhone: doctorUser.phone,
+          recipientName: doctorUser.full_name || "Doctor",
+          userId: updated.doctor?.user_id || 0,
+          appointmentId: updated.appointment_id,
+          bookingRef,
+          doctorName: doctorUser.full_name || "Doctor",
+          patientName: patientUser?.full_name || "Patient",
+          specialization: updated.doctor?.specialization || "Specialist",
+          appointmentDate: updated.appointment_date,
+          appointmentTimeStr: newAppTime,
+          previousDate: prevDate,
+          previousTimeStr: prevTimeStr,
+          customNotes: reason || "Rescheduled by patient",
+          idempotencyKey: `notif_doc_resched_${updated.appointment_id}_${Date.now()}`,
+        }).catch((err) => console.warn("Reschedule notification error (doctor):", err))
+      );
     }
+
+    // Wait for all reschedule notifications
+    await Promise.allSettled(reschedNotifs);
 
     revalidatePath("/patient/appointments");
     revalidatePath("/patient/dashboard");

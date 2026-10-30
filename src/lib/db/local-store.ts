@@ -2368,6 +2368,14 @@ class LocalDatabase {
     return log;
   }
 
+  public getNotificationLogsForAppointment(
+    appointmentId: number
+  ): NotificationLog[] {
+    return this.state.notificationLogs.filter(
+      (l) => l.appointment_id === appointmentId
+    );
+  }
+
   public getNotificationLogByIdempotency(
     idempotencyKey: string
   ): NotificationLog | null {

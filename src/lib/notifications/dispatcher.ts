@@ -62,7 +62,7 @@ export async function sendClinicalNotification(
       channel: (existingLog.channel as any) || "email",
       provider: existingLog.provider,
       messageId: existingLog.provider_message_id || undefined,
-      status: "delivered",
+      status: (existingLog.status as any) || "delivered",
     };
   }
 
@@ -188,19 +188,21 @@ export async function sendClinicalNotification(
       };
 
       // Log Email Delivery Audit
-      await db.createNotificationLog({
-        userId: payload.userId,
-        recipientEmail: payload.recipientEmail,
-        channel: "email",
-        eventType,
-        subject: rendered.subject,
-        appointmentId: payload.appointmentId || null,
-        status: res.status,
-        provider: res.provider,
-        providerMessageId: res.providerMessageId,
-        idempotencyKey: `${idempotencyBase}_email`,
-        errorMessage: res.error,
-      });
+      await db
+        .createNotificationLog({
+          userId: payload.userId,
+          recipientEmail: payload.recipientEmail,
+          channel: "email",
+          eventType,
+          subject: rendered.subject,
+          appointmentId: payload.appointmentId || null,
+          status: res.status,
+          provider: res.provider,
+          providerMessageId: res.providerMessageId,
+          idempotencyKey: `${idempotencyBase}_email`,
+          errorMessage: res.error,
+        })
+        .catch((e) => console.warn("[NOTIF-AUDIT-LOG-FAIL email]", e));
     } catch (err: unknown) {
       const errorMsg =
         err instanceof Error ? err.message : "Email delivery failed";
@@ -250,20 +252,22 @@ export async function sendClinicalNotification(
       };
 
       // Log SMS Delivery Audit
-      await db.createNotificationLog({
-        userId: payload.userId,
-        recipientEmail:
-          payload.recipientEmail || `${payload.recipientPhone}@sms.medrella.com`,
-        channel: "sms",
-        eventType,
-        subject: rendered.sms.slice(0, 100),
-        appointmentId: payload.appointmentId || null,
-        status: res.status,
-        provider: res.provider,
-        providerMessageId: res.providerMessageId,
-        idempotencyKey: `${idempotencyBase}_sms`,
-        errorMessage: res.error,
-      });
+      await db
+        .createNotificationLog({
+          userId: payload.userId,
+          recipientEmail:
+            payload.recipientEmail || `${payload.recipientPhone}@sms.medrella.com`,
+          channel: "sms",
+          eventType,
+          subject: rendered.sms.slice(0, 100),
+          appointmentId: payload.appointmentId || null,
+          status: res.status,
+          provider: res.provider,
+          providerMessageId: res.providerMessageId,
+          idempotencyKey: `${idempotencyBase}_sms`,
+          errorMessage: res.error,
+        })
+        .catch((e) => console.warn("[NOTIF-AUDIT-LOG-FAIL sms]", e));
     } catch (err: unknown) {
       const errorMsg =
         err instanceof Error ? err.message : "SMS delivery failed";
@@ -316,21 +320,23 @@ export async function sendClinicalNotification(
       };
 
       // Log WhatsApp Delivery Audit
-      await db.createNotificationLog({
-        userId: payload.userId,
-        recipientEmail:
-          payload.recipientEmail ||
-          `${payload.recipientPhone}@wa.medrella.com`,
-        channel: "whatsapp",
-        eventType,
-        subject: rendered.whatsapp.bodyText.slice(0, 100),
-        appointmentId: payload.appointmentId || null,
-        status: res.status,
-        provider: res.provider,
-        providerMessageId: res.providerMessageId,
-        idempotencyKey: `${idempotencyBase}_whatsapp`,
-        errorMessage: res.error,
-      });
+      await db
+        .createNotificationLog({
+          userId: payload.userId,
+          recipientEmail:
+            payload.recipientEmail ||
+            `${payload.recipientPhone}@wa.medrella.com`,
+          channel: "whatsapp",
+          eventType,
+          subject: rendered.whatsapp.bodyText.slice(0, 100),
+          appointmentId: payload.appointmentId || null,
+          status: res.status,
+          provider: res.provider,
+          providerMessageId: res.providerMessageId,
+          idempotencyKey: `${idempotencyBase}_whatsapp`,
+          errorMessage: res.error,
+        })
+        .catch((e) => console.warn("[NOTIF-AUDIT-LOG-FAIL whatsapp]", e));
     } catch (err: unknown) {
       const errorMsg =
         err instanceof Error ? err.message : "WhatsApp delivery failed";

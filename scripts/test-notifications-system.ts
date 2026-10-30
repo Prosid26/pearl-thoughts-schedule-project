@@ -303,7 +303,10 @@ async function runNotificationsTestSuite() {
     amountFormatted: "₹1,200",
     idempotencyKey: duplicateKey,
   });
-  assert(duplicateSend.status === "delivered", "Duplicate dispatch identified and skipped idempotently");
+  assert(
+    duplicateSend.status === "delivered" || duplicateSend.status === "simulated",
+    "Duplicate dispatch identified and skipped idempotently"
+  );
 
   // ============================================================================
   // 7. DURABLE REMINDERS SCHEDULER & CRON RUNNER

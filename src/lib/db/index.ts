@@ -2595,6 +2595,28 @@ export const db = {
     return localDb.createNotificationLog(params);
   },
 
+  getNotificationLogsForAppointment: async (
+    appointmentId: number
+  ): Promise<NotificationLog[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select()
+          .from(schema.notificationLogs)
+          .where(eq(schema.notificationLogs.appointment_id, appointmentId))
+          .orderBy(schema.notificationLogs.created_at);
+        return rows.map((l) => ({
+          ...l,
+          channel: l.channel as "email" | "sms" | "whatsapp",
+          status: l.status as any,
+          created_at: l.created_at.toISOString(),
+        }));
+      }
+    }
+    return localDb.getNotificationLogsForAppointment(appointmentId);
+  },
+
   getNotificationLogByIdempotency: async (
     idempotencyKey: string
   ): Promise<NotificationLog | null> => {

@@ -16,6 +16,10 @@ import {
   CreditCard,
   RotateCcw,
   Info,
+  Mail,
+  MessageSquare,
+  PhoneCall,
+  Bell,
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
@@ -40,6 +44,14 @@ export default async function BookingConfirmationPage({
   const refunds = appointmentId
     ? await db.getRefundsForAppointment(appointmentId)
     : [];
+
+  const notificationLogs = appointmentId
+    ? await db.getNotificationLogsForAppointment(appointmentId)
+    : [];
+
+  const emailLog = notificationLogs.find((l) => l.channel === "email");
+  const smsLog = notificationLogs.find((l) => l.channel === "sms");
+  const waLog = notificationLogs.find((l) => l.channel === "whatsapp");
 
   const latestPayment = payments[0] || null;
   const latestRefund = refunds[0] || null;
@@ -126,6 +138,146 @@ export default async function BookingConfirmationPage({
                 <Clock className="w-3.5 h-3.5 text-forest" />
                 <span>{appTime}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Clinical Notifications Dispatch Status Banner */}
+          <div className="p-4 rounded-xl border border-warm-border bg-ivory-light space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-forest/10 flex items-center justify-center text-forest">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted block font-sans">
+                    Multi-Channel Notifications
+                  </span>
+                  <div className="text-sm font-bold text-ink">
+                    Dispatch & Confirmation Status
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-semibold bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>
+                  {notificationLogs.length > 0
+                    ? `${notificationLogs.length} Notification Event${notificationLogs.length > 1 ? "s" : ""} Recorded`
+                    : "Dispatched to Patient & Doctor"}
+                </span>
+              </div>
+            </div>
+
+            {/* Channels Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              {/* Email */}
+              <div className="p-3 rounded-lg bg-white border border-warm-border/80 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-forest flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" />
+                    Email
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${
+                      emailLog?.status === "delivered" || emailLog?.status === "sent"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : emailLog?.status === "simulated"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-forest/10 text-forest"
+                    }`}
+                  >
+                    {emailLog
+                      ? emailLog.status === "simulated"
+                        ? "Simulated"
+                        : emailLog.status
+                      : "Pending"}
+                  </span>
+                </div>
+                <div className="text-[11px] text-ink truncate font-medium">
+                  {appointment?.patient?.user?.email || "Registered Email"}
+                </div>
+                <div className="text-[10px] text-ink-muted">
+                  {emailLog?.provider === "console-simulator"
+                    ? "Console Simulator"
+                    : emailLog?.provider === "resend"
+                    ? "Resend (Live)"
+                    : emailLog?.provider || "Email Provider"}
+                </div>
+              </div>
+
+              {/* SMS */}
+              <div className="p-3 rounded-lg bg-white border border-warm-border/80 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-forest flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    SMS
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${
+                      smsLog?.status === "delivered" || smsLog?.status === "sent"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : smsLog?.status === "simulated"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-forest/10 text-forest"
+                    }`}
+                  >
+                    {smsLog
+                      ? smsLog.status === "simulated"
+                        ? "Simulated"
+                        : smsLog.status
+                      : "Pending"}
+                  </span>
+                </div>
+                <div className="text-[11px] text-ink truncate font-medium">
+                  {appointment?.patient?.user?.phone || "+91 Contact"}
+                </div>
+                <div className="text-[10px] text-ink-muted">
+                  {smsLog?.provider === "console-sms-simulator"
+                    ? "Console Simulator"
+                    : smsLog?.provider === "twilio"
+                    ? "Twilio (Live)"
+                    : smsLog?.provider || "SMS Provider"}
+                </div>
+              </div>
+
+              {/* WhatsApp */}
+              <div className="p-3 rounded-lg bg-white border border-warm-border/80 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-forest flex items-center gap-1.5">
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    WhatsApp
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${
+                      waLog?.status === "delivered" || waLog?.status === "sent"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : waLog?.status === "simulated"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-forest/10 text-forest"
+                    }`}
+                  >
+                    {waLog
+                      ? waLog.status === "simulated"
+                        ? "Simulated"
+                        : waLog.status
+                      : "Pending"}
+                  </span>
+                </div>
+                <div className="text-[11px] text-ink truncate font-medium">
+                  {appointment?.patient?.user?.phone || "+91 Contact"}
+                </div>
+                <div className="text-[10px] text-ink-muted">
+                  {waLog?.provider === "console-whatsapp-simulator"
+                    ? "Console Simulator"
+                    : waLog?.provider === "meta-whatsapp-cloud"
+                    ? "WhatsApp Cloud (Live)"
+                    : waLog?.provider || "WhatsApp Provider"}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-1 text-[11px] text-ink-muted leading-relaxed">
+              Appointment reminders are durably scheduled for 24 hours and 2 hours prior to your consultation. You can adjust your channel preferences anytime in your Profile.
             </div>
           </div>
 
