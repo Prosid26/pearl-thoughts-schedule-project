@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { EarlySlotOfferBanner } from "@/components/patient/EarlySlotOfferBanner";
 import { PatientNotificationsPanel } from "@/components/patient/PatientNotificationsPanel";
-import { formatISTDate, formatISTTime } from "@/lib/utils/date";
+import { NotificationPreferencesSection } from "@/components/patient/NotificationPreferencesSection";
+import { formatISTDate, formatISTTime, isSlotInPast } from "@/lib/utils/date";
 
 export default async function PatientDashboardPage() {
   const session = await getSession();
@@ -30,12 +31,15 @@ export default async function PatientDashboardPage() {
 
   const appointments = await db.getAppointmentsForPatient(session.patient_id);
   const initialOffer = await db.getActiveOfferForPatient(session.patient_id);
+  const preferences = await db.getNotificationPreferences(session.user_id);
 
-  const upcomingAppointments = appointments.filter(
-    (a) =>
-      (a.status === "pending" || a.status === "confirmed") &&
-      new Date(a.appointment_date) >= new Date()
-  );
+  const upcomingAppointments = appointments.filter((a) => {
+    if (a.status !== "pending" && a.status !== "confirmed") return false;
+    if (a.availability?.available_date && a.availability?.start_time) {
+      return !isSlotInPast(a.availability.available_date, a.availability.start_time);
+    }
+    return new Date(a.appointment_date) >= new Date();
+  });
 
   const nextAppointment =
     upcomingAppointments.length > 0 ? upcomingAppointments[0] : null;
@@ -223,6 +227,9 @@ export default async function PatientDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Patient Notification Preferences & Unsubscribe Controls */}
+      <NotificationPreferencesSection initialPreferences={preferences} />
     </div>
   );
 }

@@ -68,6 +68,10 @@ async function runTestSuite() {
   // TEST 4: Fetch Doctor Availability Slots
   console.log("\nTEST 4: Doctor-Specific Availability Slots");
   const targetDoctor = cardiologists[0];
+  localDb.updateDoctor(targetDoctor.doctor_id, {
+    scheduling_mode: "stream",
+    wave_capacity: 1,
+  });
   const openSlots = localDb.getDoctorAvailability(targetDoctor.doctor_id, undefined, true);
   assert(openSlots.length > 0, `Found ${openSlots.length} available slots for ${targetDoctor.user?.full_name}`);
   const slotToBook = openSlots.find((s) => !s.is_wave) || openSlots[0];
@@ -150,11 +154,11 @@ async function runTestSuite() {
   const addedSlot = localDb.addAvailabilitySlot(
     targetDoctor.doctor_id,
     futureDate,
-    "16:00",
-    "16:30",
+    "18:00",
+    "18:30",
     30
   );
-  assert(addedSlot.availability_id > 0, `Doctor created new slot on ${futureDate} at 16:00`);
+  assert(addedSlot.availability_id > 0, `Doctor created new slot on ${futureDate} at 18:00`);
 
   const deleted = localDb.deleteAvailabilitySlot(addedSlot.availability_id, targetDoctor.doctor_id);
   assert(deleted === true, "Doctor successfully deleted the unused availability slot");
@@ -191,6 +195,24 @@ async function runTestSuite() {
   const dEarly = new Date();
   dEarly.setDate(dEarly.getDate() + 30 + Math.floor(Math.random() * 500));
   const earlyDate = dEarly.toISOString().split("T")[0];
+
+  const existingEarlySlots = localDb.getDoctorAvailability(targetDoctor.doctor_id).filter(
+    (s) => s.available_date === earlyDate
+  );
+  for (const s of existingEarlySlots) {
+    const linked = localDb.getAppointmentsForDoctor(targetDoctor.doctor_id).filter(
+      (a) => a.availability_id === s.availability_id && a.status !== "cancelled"
+    );
+    for (const a of linked) {
+      localDb.updateAppointmentStatus({
+        appointmentId: a.appointment_id,
+        newStatus: "cancelled",
+        requesterUserId: 1,
+        requesterRole: "admin",
+      });
+    }
+    localDb.deleteAvailabilitySlot(s.availability_id, targetDoctor.doctor_id);
+  }
 
   const earlySlot = localDb.addAvailabilitySlot(
     targetDoctor.doctor_id,
@@ -539,6 +561,12 @@ async function runTestSuite() {
   const patient2Notifications = localDb.getNotificationsForUser(userPatient2.user_id);
   const reschedNotif = patient2Notifications.find((n) => n.type === "rescheduled");
   assert(Boolean(reschedNotif), "Patient received in-app notification for successful reschedule");
+
+  // Reset doctor back to stream mode
+  localDb.updateDoctor(targetDoctor.doctor_id, {
+    scheduling_mode: "stream",
+    wave_capacity: 1,
+  });
 
   console.log("\n=========================================================");
   console.log(`TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED (100%)`);

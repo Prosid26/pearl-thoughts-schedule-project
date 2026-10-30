@@ -103,9 +103,11 @@ export async function POST(req: NextRequest) {
                 const feeFormatted = formatINR(payment.amount / 100);
                 await sendClinicalNotification("payment_success", {
                   recipientEmail: appt.patient.user.email,
+                  recipientPhone: appt.patient.user.phone,
                   recipientName: appt.patient.user.full_name || "Patient",
                   userId: appt.patient.user_id,
                   appointmentId: appt.appointment_id,
+                  bookingRef: `#APT-${String(appt.appointment_id).padStart(5, "0")}`,
                   doctorName: appt.doctor?.user?.full_name || "Doctor",
                   specialization: appt.doctor?.specialization || "Specialist",
                   appointmentDate: appt.appointment_date,
@@ -145,9 +147,11 @@ export async function POST(req: NextRequest) {
             if (appt?.patient?.user?.email) {
               await sendClinicalNotification("payment_failed", {
                 recipientEmail: appt.patient.user.email,
+                recipientPhone: appt.patient.user.phone,
                 recipientName: appt.patient.user.full_name || "Patient",
                 userId: appt.patient.user_id,
                 appointmentId: appt.appointment_id,
+                bookingRef: `#APT-${String(appt.appointment_id).padStart(5, "0")}`,
                 doctorName: appt.doctor?.user?.full_name || "Doctor",
                 specialization: appt.doctor?.specialization || "Specialist",
                 appointmentDate: appt.appointment_date,

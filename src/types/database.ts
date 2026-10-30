@@ -247,3 +247,22 @@ export interface ScheduledReminder {
   created_at: string;
   updated_at: string;
 }
+
+export interface PatientNotificationPreferences {
+  preference_id: number;
+  user_id: number;
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  whatsapp_enabled: boolean;
+  appointment_confirmations: boolean;
+  appointment_reminders: boolean;
+  cancellation_rescheduling: boolean;
+  payment_confirmations: boolean;
+  refund_updates: boolean;
+  unsubscribed_all: boolean;
+  sms_consent: boolean;
+  whatsapp_consent: boolean;
+  consent_timestamp?: string | null;
+  created_at: string;
+  updated_at: string;
+}

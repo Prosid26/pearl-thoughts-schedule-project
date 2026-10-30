@@ -89,10 +89,16 @@ export async function processDueReminders(): Promise<{
 
     const idempotencyKey = `reminder_${reminder.reminder_id}_${reminder.reminder_type}`;
 
+    const patientUserId =
+      appointment.patient?.user_id ||
+      (await db.getPatientById(appointment.patient_id))?.user_id ||
+      appointment.patient_id;
+
     const res = await sendClinicalNotification("appointment_reminder", {
       recipientEmail: patientUser.email,
+      recipientPhone: patientUser.phone,
       recipientName: patientUser.full_name || "Patient",
-      userId: appointment.patient?.user_id || appointment.patient_id,
+      userId: patientUserId,
       appointmentId: appointment.appointment_id,
       doctorName: appointment.doctor?.user?.full_name || "Doctor",
       specialization: appointment.doctor?.specialization || "Specialist",
@@ -103,7 +109,14 @@ export async function processDueReminders(): Promise<{
       idempotencyKey,
     });
 
-    if (res.success) {
+    if (res.skipped) {
+      await db.updateReminderStatus(
+        reminder.reminder_id,
+        "cancelled",
+        res.skipReason || "Suppressed by current patient notification preferences"
+      );
+      skippedCount++;
+    } else if (res.success) {
       await db.updateReminderStatus(reminder.reminder_id, "sent");
       sentCount++;
     } else {

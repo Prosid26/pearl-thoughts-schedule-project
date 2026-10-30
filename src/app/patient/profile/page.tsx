@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { PatientProfileForm } from "@/components/patient/PatientProfileForm";
+import { NotificationPreferencesSection } from "@/components/patient/NotificationPreferencesSection";
 import { User } from "lucide-react";
 
 export default async function PatientProfilePage() {
@@ -16,6 +17,7 @@ export default async function PatientProfilePage() {
 
   const patient = await db.getPatientById(session.patient_id);
   const user = await db.getUserById(session.user_id);
+  const preferences = await db.getNotificationPreferences(session.user_id);
 
   if (!patient || !user) {
     redirect("/patient/dashboard");
@@ -37,6 +39,8 @@ export default async function PatientProfilePage() {
       </div>
 
       <PatientProfileForm patient={patient} user={user} />
+
+      <NotificationPreferencesSection initialPreferences={preferences} />
     </div>
   );
 }

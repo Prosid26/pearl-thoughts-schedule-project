@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatINR } from "@/lib/utils/currency";
+import { formatISTDate, isSlotInPast } from "@/lib/utils/date";
 import { PaymentCheckoutModal } from "@/components/payments/PaymentCheckoutModal";
 
 interface Props {
@@ -28,9 +29,14 @@ interface Props {
 export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
   const router = useRouter();
 
+  // Filter only future available slots strictly in Asia/Kolkata
+  const validSlots = availabilities.filter(
+    (a) => a.is_available && !isSlotInPast(a.available_date, a.start_time)
+  );
+
   // Group availability by date
   const dates = Array.from(
-    new Set(availabilities.map((a) => a.available_date))
+    new Set(validSlots.map((a) => a.available_date))
   ).sort();
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -42,11 +48,11 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [paymentAppointmentId, setPaymentAppointmentId] = useState<number | null>(null);
 
-  const slotsForDate = availabilities.filter(
+  const slotsForDate = validSlots.filter(
     (a) => a.available_date === selectedDate
   );
 
-  const selectedSlot = availabilities.find(
+  const selectedSlot = validSlots.find(
     (a) => a.availability_id === selectedSlotId
   );
 
@@ -136,14 +142,17 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
           ) : (
             <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
               {dates.map((d) => {
-                const dateObj = new Date(d + "T00:00:00");
-                const dayName = dateObj.toLocaleDateString("en-US", {
+                const [y, m, day] = d.split("-").map(Number);
+                const dateObj = new Date(Date.UTC(y, m - 1, day, 12, 0, 0));
+                const dayName = new Intl.DateTimeFormat("en-IN", {
+                  timeZone: "Asia/Kolkata",
                   weekday: "short",
-                });
-                const dayNum = dateObj.toLocaleDateString("en-US", {
+                }).format(dateObj);
+                const dayNum = new Intl.DateTimeFormat("en-IN", {
+                  timeZone: "Asia/Kolkata",
                   day: "numeric",
                   month: "short",
-                });
+                }).format(dateObj);
                 const isSelected = selectedDate === d;
 
                 return (
@@ -183,7 +192,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
           <div className="pt-6 border-t border-warm-border-subtle">
             <label className="text-xs font-bold text-ink uppercase tracking-wider block mb-3 flex items-center gap-1.5 font-sans">
               <Clock className="w-4 h-4 text-forest" />
-              2. Available Time Slots for {selectedDate}
+              2. Available Time Slots for {formatISTDate(selectedDate)}
             </label>
 
             {slotsForDate.length === 0 ? (

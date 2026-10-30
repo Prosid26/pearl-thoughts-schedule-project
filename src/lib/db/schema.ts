@@ -450,6 +450,45 @@ export const scheduledRemindersRelations = relations(
   })
 );
 
+/**
+ * 14. PATIENT NOTIFICATION PREFERENCES TABLE
+ */
+export const notificationPreferences = pgTable("notification_preferences", {
+  preference_id: serial("preference_id").primaryKey(),
+  user_id: integer("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.user_id, { onDelete: "cascade" }),
+  // Channels
+  email_enabled: boolean("email_enabled").notNull().default(true),
+  sms_enabled: boolean("sms_enabled").notNull().default(true),
+  whatsapp_enabled: boolean("whatsapp_enabled").notNull().default(true),
+  // Categories
+  appointment_confirmations: boolean("appointment_confirmations").notNull().default(true),
+  appointment_reminders: boolean("appointment_reminders").notNull().default(true),
+  cancellation_rescheduling: boolean("cancellation_rescheduling").notNull().default(true),
+  payment_confirmations: boolean("payment_confirmations").notNull().default(true),
+  refund_updates: boolean("refund_updates").notNull().default(true),
+  // Global Unsubscribe Flag
+  unsubscribed_all: boolean("unsubscribed_all").notNull().default(false),
+  // Consent
+  sms_consent: boolean("sms_consent").notNull().default(true),
+  whatsapp_consent: boolean("whatsapp_consent").notNull().default(true),
+  consent_timestamp: timestamp("consent_timestamp", { withTimezone: true }).defaultNow(),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const notificationPreferencesRelations = relations(
+  notificationPreferences,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [notificationPreferences.user_id],
+      references: [users.user_id],
+    }),
+  })
+);
+
 export type UserSelect = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
 
@@ -488,3 +527,6 @@ export type NotificationLogInsert = typeof notificationLogs.$inferInsert;
 
 export type ScheduledReminderSelect = typeof scheduledReminders.$inferSelect;
 export type ScheduledReminderInsert = typeof scheduledReminders.$inferInsert;
+
+export type NotificationPreferenceSelect = typeof notificationPreferences.$inferSelect;
+export type NotificationPreferenceInsert = typeof notificationPreferences.$inferInsert;

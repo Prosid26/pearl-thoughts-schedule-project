@@ -1,5 +1,10 @@
 import fs from "fs";
 import path from "path";
+import { isSlotInPast, getTodayIST } from "@/lib/utils/date";
+import {
+  generateDoctorSlotsForDate,
+  getRollingDateWindow,
+} from "@/lib/scheduling/doctor-schedule";
 import {
   User,
   Patient,
@@ -22,6 +27,7 @@ import {
   WebhookEvent,
   NotificationLog,
   ScheduledReminder,
+  PatientNotificationPreferences,
 } from "@/types/database";
 
 interface DatabaseState {
@@ -38,6 +44,7 @@ interface DatabaseState {
   webhookEvents: WebhookEvent[];
   notificationLogs: NotificationLog[];
   scheduledReminders: ScheduledReminder[];
+  notificationPreferences: PatientNotificationPreferences[];
   counters: {
     userId: number;
     patientId: number;
@@ -52,6 +59,7 @@ interface DatabaseState {
     webhookEventId: number;
     deliveryId: number;
     reminderId: number;
+    preferenceId: number;
   };
 }
 
@@ -573,6 +581,7 @@ function generateInitialSeed(): DatabaseState {
     webhookEvents: [],
     notificationLogs: [],
     scheduledReminders: [],
+    notificationPreferences: [],
     counters: {
       userId: 11,
       patientId: 2,
@@ -587,6 +596,7 @@ function generateInitialSeed(): DatabaseState {
       webhookEventId: 0,
       deliveryId: 0,
       reminderId: 0,
+      preferenceId: 0,
     },
   };
 }
@@ -624,6 +634,7 @@ class LocalDatabase {
           if (!parsed.webhookEvents) parsed.webhookEvents = [];
           if (!parsed.notificationLogs) parsed.notificationLogs = [];
           if (!parsed.scheduledReminders) parsed.scheduledReminders = [];
+          if (!parsed.notificationPreferences) parsed.notificationPreferences = [];
           if (!parsed.counters) parsed.counters = {};
           if (!parsed.counters.queueId) parsed.counters.queueId = parsed.waitingQueue.length;
           if (!parsed.counters.offerId) parsed.counters.offerId = parsed.earlySlotOffers.length;
@@ -633,6 +644,7 @@ class LocalDatabase {
           if (!parsed.counters.webhookEventId) parsed.counters.webhookEventId = parsed.webhookEvents.length;
           if (!parsed.counters.deliveryId) parsed.counters.deliveryId = parsed.notificationLogs.length;
           if (!parsed.counters.reminderId) parsed.counters.reminderId = parsed.scheduledReminders.length;
+          if (!parsed.counters.preferenceId) parsed.counters.preferenceId = parsed.notificationPreferences.length;
           if (!parsed.users.some((u: User) => u.email === "admin@demo.com")) {
             parsed.users.push({
               user_id: 11,
@@ -946,17 +958,89 @@ class LocalDatabase {
   }
 
   // --- Availability operations ---
+  public ensureDoctorAvailabilityWindow(
+    doctorId: number,
+    daysAhead: number = 14
+  ): void {
+    const doctor = this.getDoctorById(doctorId);
+    if (!doctor) return;
+
+    const dates = getRollingDateWindow(daysAhead);
+    let addedCount = 0;
+
+    for (const dateStr of dates) {
+      const candidateSlots = generateDoctorSlotsForDate(
+        doctorId,
+        dateStr,
+        doctor.scheduling_mode,
+        doctor.wave_capacity
+      );
+
+      for (const slotDef of candidateSlots) {
+        const existing = this.state.availability.find(
+          (a) =>
+            a.doctor_id === doctorId &&
+            a.available_date === dateStr &&
+            a.start_time === slotDef.startTime
+        );
+
+        if (!existing) {
+          this.state.counters.availabilityId += 1;
+          this.state.availability.push({
+            availability_id: this.state.counters.availabilityId,
+            doctor_id: doctorId,
+            available_date: dateStr,
+            start_time: slotDef.startTime,
+            end_time: slotDef.endTime,
+            slot_duration: slotDef.slotDuration,
+            is_available: true,
+            is_wave: slotDef.isWave,
+            wave_capacity: slotDef.waveCapacity,
+            wave_booked_count: 0,
+            created_at: new Date().toISOString(),
+          });
+          addedCount++;
+        } else if (
+          existing.is_available &&
+          (existing.wave_booked_count || 0) === 0 &&
+          existing.is_wave !== slotDef.isWave
+        ) {
+          // Sync unbooked future slot mode with doctor's updated scheduling policy
+          existing.is_wave = slotDef.isWave;
+          existing.wave_capacity = slotDef.waveCapacity;
+          addedCount++;
+        }
+      }
+    }
+
+    if (addedCount > 0) {
+      this.saveState(this.state);
+    }
+  }
+
   public getDoctorAvailability(
     doctorId: number,
     date?: string,
     onlyAvailable: boolean = false
   ): Availability[] {
-    return this.state.availability.filter((a) => {
-      if (a.doctor_id !== doctorId) return false;
-      if (date && a.available_date !== date) return false;
-      if (onlyAvailable && !a.is_available) return false;
-      return true;
-    });
+    this.ensureDoctorAvailabilityWindow(doctorId, 14);
+
+    return this.state.availability
+      .filter((a) => {
+        if (a.doctor_id !== doctorId) return false;
+        if (date && a.available_date !== date) return false;
+        if (onlyAvailable) {
+          if (!a.is_available) return false;
+          if (isSlotInPast(a.available_date, a.start_time)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.available_date !== b.available_date) {
+          return a.available_date.localeCompare(b.available_date);
+        }
+        return a.start_time.localeCompare(b.start_time);
+      });
   }
 
   public getAvailabilityById(
@@ -980,10 +1064,9 @@ class LocalDatabase {
     const doctor = this.getDoctorById(doctorId);
     if (!doctor) throw new Error("Doctor does not exist.");
 
-    // Validate future date
-    const today = new Date().toISOString().split("T")[0];
-    if (availableDate < today) {
-      throw new Error("Cannot configure availability for past dates.");
+    // Validate future slot in IST
+    if (isSlotInPast(availableDate, startTime)) {
+      throw new Error("Cannot add availability for a past date or time.");
     }
 
     // Check duplicate or overlap
@@ -1082,6 +1165,10 @@ class LocalDatabase {
       throw new Error(
         "Integrity error: Slot does not belong to the selected doctor."
       );
+    }
+
+    if (isSlotInPast(slot.available_date, slot.start_time)) {
+      throw new Error("Cannot book an appointment for a past date or time.");
     }
 
     let waveNum: number | null = null;
@@ -1206,6 +1293,10 @@ class LocalDatabase {
 
     if (newSlot.doctor_id !== app.doctor_id) {
       throw new Error("Rescheduling is only supported with the same consulting practitioner.");
+    }
+
+    if (isSlotInPast(newSlot.available_date, newSlot.start_time)) {
+      throw new Error("Cannot reschedule an appointment to a past date or time.");
     }
 
     // Check availability of target slot
@@ -2286,6 +2377,30 @@ class LocalDatabase {
     return l || null;
   }
 
+  public getNotificationLogByMessageId(
+    providerMessageId: string
+  ): NotificationLog | null {
+    const l = this.state.notificationLogs.find(
+      (x) => x.provider_message_id === providerMessageId
+    );
+    return l || null;
+  }
+
+  public updateNotificationLogStatus(
+    providerMessageId: string,
+    status: "sent" | "delivered" | "failed",
+    errorMessage?: string
+  ): void {
+    const l = this.state.notificationLogs.find(
+      (x) => x.provider_message_id === providerMessageId
+    );
+    if (l) {
+      l.status = status;
+      if (errorMessage) l.error_message = errorMessage;
+      this.commit();
+    }
+  }
+
   public createInAppNotification(params: {
     userId: number;
     title: string;
@@ -2383,6 +2498,133 @@ class LocalDatabase {
       r.updated_at = new Date().toISOString();
       this.commit();
     }
+  }
+
+  // --- Patient Notification Preferences ---
+  public getNotificationPreferences(userId: number): PatientNotificationPreferences {
+    const existing = this.state.notificationPreferences.find((p) => p.user_id === userId);
+    if (existing) {
+      return { ...existing };
+    }
+
+    // Default configuration: all enabled, not unsubscribed
+    this.state.counters.preferenceId = (this.state.counters.preferenceId || 0) + 1;
+    const defaultPref: PatientNotificationPreferences = {
+      preference_id: this.state.counters.preferenceId,
+      user_id: userId,
+      email_enabled: true,
+      sms_enabled: true,
+      whatsapp_enabled: true,
+      appointment_confirmations: true,
+      appointment_reminders: true,
+      cancellation_rescheduling: true,
+      payment_confirmations: true,
+      refund_updates: true,
+      unsubscribed_all: false,
+      sms_consent: true,
+      whatsapp_consent: true,
+      consent_timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    this.state.notificationPreferences.push(defaultPref);
+    this.commit();
+    return { ...defaultPref };
+  }
+
+  public updateNotificationPreferences(
+    userId: number,
+    updates: Partial<Omit<PatientNotificationPreferences, "preference_id" | "user_id" | "created_at">>
+  ): PatientNotificationPreferences {
+    let pref = this.state.notificationPreferences.find((p) => p.user_id === userId);
+    if (!pref) {
+      this.getNotificationPreferences(userId);
+      pref = this.state.notificationPreferences.find((p) => p.user_id === userId)!;
+    }
+
+    Object.assign(pref, updates, { updated_at: new Date().toISOString() });
+    this.commit();
+    return { ...pref };
+  }
+
+  public unsubscribeAll(userId: number): PatientNotificationPreferences {
+    const pref = this.updateNotificationPreferences(userId, {
+      unsubscribed_all: true,
+      email_enabled: false,
+      sms_enabled: false,
+      whatsapp_enabled: false,
+    });
+
+    // Cancel all pending reminders for this patient
+    const patient = this.state.patients.find((p) => p.user_id === userId);
+    if (patient) {
+      const appts = this.state.appointments.filter((a) => a.patient_id === patient.patient_id);
+      for (const a of appts) {
+        this.cancelRemindersForAppointment(a.appointment_id);
+      }
+    }
+
+    return pref;
+  }
+
+  public unsubscribeChannelByPhone(
+    phone: string,
+    channel: "sms" | "whatsapp"
+  ): { success: boolean; userId?: number } {
+    const cleanTarget = phone.replace(/\D/g, "");
+    const user = this.state.users.find((u) => {
+      const uClean = u.phone.replace(/\D/g, "");
+      return (
+        (uClean.length >= 10 && cleanTarget.endsWith(uClean.slice(-10))) ||
+        (cleanTarget.length >= 10 && uClean.endsWith(cleanTarget.slice(-10)))
+      );
+    });
+
+    if (!user) {
+      return { success: false };
+    }
+
+    if (channel === "sms") {
+      this.updateNotificationPreferences(user.user_id, { sms_enabled: false });
+    } else if (channel === "whatsapp") {
+      this.updateNotificationPreferences(user.user_id, { whatsapp_enabled: false });
+    }
+
+    return { success: true, userId: user.user_id };
+  }
+
+  public resubscribeChannelByPhone(
+    phone: string,
+    channel: "sms" | "whatsapp"
+  ): { success: boolean; userId?: number } {
+    const cleanTarget = phone.replace(/\D/g, "");
+    const user = this.state.users.find((u) => {
+      const uClean = u.phone.replace(/\D/g, "");
+      return (
+        (uClean.length >= 10 && cleanTarget.endsWith(uClean.slice(-10))) ||
+        (cleanTarget.length >= 10 && uClean.endsWith(cleanTarget.slice(-10)))
+      );
+    });
+
+    if (!user) {
+      return { success: false };
+    }
+
+    if (channel === "sms") {
+      this.updateNotificationPreferences(user.user_id, {
+        sms_enabled: true,
+        sms_consent: true,
+        unsubscribed_all: false,
+      });
+    } else if (channel === "whatsapp") {
+      this.updateNotificationPreferences(user.user_id, {
+        whatsapp_enabled: true,
+        whatsapp_consent: true,
+        unsubscribed_all: false,
+      });
+    }
+
+    return { success: true, userId: user.user_id };
   }
 }
 

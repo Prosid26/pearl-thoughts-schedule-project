@@ -130,3 +130,78 @@ export function formatCountdown(seconds: number): string {
   const secs = seconds % 60;
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
+
+/**
+ * Return today's date formatted as "YYYY-MM-DD" in Indian Standard Time (Asia/Kolkata).
+ */
+export function getTodayIST(refDate: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TIMEZONE,
+  }).format(refDate);
+}
+
+/**
+ * Return current time formatted as 24-hour "HH:mm" in Indian Standard Time (Asia/Kolkata).
+ */
+export function getCurrentTimeIST(refDate: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: IST_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(refDate);
+}
+
+/**
+ * Add N days to a "YYYY-MM-DD" date string in IST, returning "YYYY-MM-DD".
+ */
+export function addDaysIST(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  d.setUTCDate(d.getUTCDate() + days);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+/**
+ * Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday) in IST.
+ */
+export function getDayOfWeekIST(dateStr: string): number {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return d.getUTCDay();
+}
+
+/**
+ * Determine whether a given date ("YYYY-MM-DD") is strictly in the past (before today in IST).
+ */
+export function isDateInPast(dateStr: string, refDate: Date = new Date()): boolean {
+  if (!dateStr) return false;
+  const todayIST = getTodayIST(refDate);
+  return dateStr < todayIST;
+}
+
+/**
+ * Determine whether a slot (date + startTime) is in the past in IST.
+ * - If availableDate < todayIST -> true
+ * - If availableDate > todayIST -> false
+ * - If availableDate === todayIST -> true if startTime <= currentTimeIST
+ */
+export function isSlotInPast(
+  availableDate: string,
+  startTime: string,
+  refDate: Date = new Date()
+): boolean {
+  if (!availableDate) return false;
+  const todayIST = getTodayIST(refDate);
+  if (availableDate < todayIST) return true;
+  if (availableDate > todayIST) return false;
+
+  if (!startTime) return true;
+  const currentTimeIST = getCurrentTimeIST(refDate);
+  const slotTimeNormalized =
+    startTime.length === 5 ? startTime : startTime.slice(0, 5);
+  return slotTimeNormalized <= currentTimeIST;
+}

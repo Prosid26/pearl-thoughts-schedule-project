@@ -27,7 +27,7 @@ export default async function DoctorDetailPage({
 
   const [doctor, availabilities, session] = await Promise.all([
     db.getDoctorById(doctorId),
-    db.getDoctorAvailability(doctorId),
+    db.getDoctorAvailability(doctorId, undefined, true),
     getSession(),
   ]);
 

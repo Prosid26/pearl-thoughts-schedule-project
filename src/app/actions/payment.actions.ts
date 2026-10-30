@@ -181,9 +181,11 @@ export async function verifyPaymentAction(params: {
       if (appointment.patient?.user?.email) {
         await sendClinicalNotification("payment_failed", {
           recipientEmail: appointment.patient.user.email,
+          recipientPhone: appointment.patient.user.phone,
           recipientName: appointment.patient.user.full_name || "Patient",
           userId: appointment.patient.user_id,
           appointmentId: appointment.appointment_id,
+          bookingRef: `#APT-${String(appointment.appointment_id).padStart(5, "0")}`,
           doctorName: appointment.doctor?.user?.full_name || "Doctor",
           specialization: appointment.doctor?.specialization || "Specialist",
           appointmentDate: appointment.appointment_date,
@@ -222,9 +224,11 @@ export async function verifyPaymentAction(params: {
 
       await sendClinicalNotification("payment_success", {
         recipientEmail: appointment.patient.user.email,
+        recipientPhone: appointment.patient.user.phone,
         recipientName: appointment.patient.user.full_name || "Patient",
         userId: appointment.patient.user_id,
         appointmentId: appointment.appointment_id,
+        bookingRef: `#APT-${String(appointment.appointment_id).padStart(5, "0")}`,
         doctorName: appointment.doctor?.user?.full_name || "Doctor",
         specialization: appointment.doctor?.specialization || "Specialist",
         appointmentDate: appointment.appointment_date,
@@ -377,9 +381,11 @@ export async function requestRefundAction(params: {
     if (appointment.patient?.user?.email) {
       await sendClinicalNotification("refund_processed", {
         recipientEmail: appointment.patient.user.email,
+        recipientPhone: appointment.patient.user.phone,
         recipientName: appointment.patient.user.full_name || "Patient",
         userId: appointment.patient.user_id,
         appointmentId: appointment.appointment_id,
+        bookingRef: `#APT-${String(appointment.appointment_id).padStart(5, "0")}`,
         doctorName: appointment.doctor?.user?.full_name || "Doctor",
         specialization: appointment.doctor?.specialization || "Specialist",
         appointmentDate: appointment.appointment_date,

@@ -19,6 +19,7 @@ import {
   Activity,
   Users,
 } from "lucide-react";
+import { getTodayIST, isSlotInPast, formatISTDate } from "@/lib/utils/date";
 
 interface Props {
   initialAvailabilities: Availability[];
@@ -85,6 +86,15 @@ export function DoctorAvailabilityManager({
     setErrorMessage(null);
 
     const formData = new FormData(e.currentTarget);
+    const dateVal = formData.get("available_date") as string;
+    const timeVal = formData.get("start_time") as string;
+
+    if (dateVal && timeVal && isSlotInPast(dateVal, timeVal)) {
+      setErrorMessage("Cannot configure availability for a past date or time.");
+      setLoading(false);
+      return;
+    }
+
     const res = await addDoctorAvailabilityAction(null, formData);
 
     if (res.success) {
@@ -116,10 +126,8 @@ export function DoctorAvailabilityManager({
     setDeletingId(null);
   };
 
-  // Get tomorrow date string for min date in picker
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split("T")[0];
+  // Get today's date in IST as minimum selectable date in picker
+  const minDate = getTodayIST();
 
   return (
     <div className="space-y-8">
@@ -381,9 +389,7 @@ export function DoctorAvailabilityManager({
               const dateSlots = groupedSlots[dateStr].sort((a, b) =>
                 a.start_time.localeCompare(b.start_time)
               );
-              const formattedDate = new Date(
-                dateStr + "T00:00:00"
-              ).toLocaleDateString("en-US", {
+              const formattedDate = formatISTDate(dateStr, {
                 weekday: "long",
                 month: "short",
                 day: "numeric",

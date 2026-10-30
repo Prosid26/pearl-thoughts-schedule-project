@@ -17,6 +17,7 @@ import {
   Layers,
   Sparkles,
 } from "lucide-react";
+import { isSlotInPast } from "@/lib/utils/date";
 
 interface Props {
   appointment: Appointment;
@@ -51,9 +52,12 @@ export function RescheduleModal({
       getDoctorAvailableSlotsAction(appointment.doctor_id).then((res) => {
         setLoadingSlots(false);
         if (res.success && res.data) {
-          // Filter out the current appointment's slot
+          // Filter out the current appointment's slot and past slots
           const available = res.data.filter(
-            (s) => s.availability_id !== appointment.availability_id
+            (s) =>
+              s.availability_id !== appointment.availability_id &&
+              s.is_available &&
+              !isSlotInPast(s.available_date, s.start_time)
           );
           setSlots(available);
           const distinctDates = Array.from(
@@ -203,14 +207,17 @@ export function RescheduleModal({
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {dates.map((d) => {
                   const isSelected = d === selectedDate;
-                  const dateObj = new Date(d + "T00:00:00");
-                  const dayName = dateObj.toLocaleDateString("en-US", {
+                  const [y, m, day] = d.split("-").map(Number);
+                  const dateObj = new Date(Date.UTC(y, m - 1, day, 12, 0, 0));
+                  const dayName = new Intl.DateTimeFormat("en-IN", {
+                    timeZone: "Asia/Kolkata",
                     weekday: "short",
-                  });
-                  const dayNum = dateObj.toLocaleDateString("en-US", {
+                  }).format(dateObj);
+                  const dayNum = new Intl.DateTimeFormat("en-IN", {
+                    timeZone: "Asia/Kolkata",
                     day: "numeric",
                     month: "short",
-                  });
+                  }).format(dateObj);
 
                   return (
                     <button
