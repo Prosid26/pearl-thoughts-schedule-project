@@ -41,6 +41,28 @@ async function migrateDay4() {
     );
   `;
 
+  // 7b. In-App Notifications table
+  console.log("7b. Creating in_app_notifications table if not exists...");
+  await sql`
+    CREATE TABLE IF NOT EXISTS in_app_notifications (
+      notification_id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      category VARCHAR(50) NOT NULL DEFAULT 'general',
+      appointment_id INTEGER REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+      action_url VARCHAR(255),
+      is_read BOOLEAN NOT NULL DEFAULT false,
+      read_at TIMESTAMP WITH TIME ZONE,
+      idempotency_key VARCHAR(150) UNIQUE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `;
+  await sql`
+    ALTER TABLE notification_preferences
+    ADD COLUMN IF NOT EXISTS in_app_enabled BOOLEAN NOT NULL DEFAULT true;
+  `;
+
   // 3. Create refunds table
   console.log("3. Creating refunds table if not exists...");
   await sql`
@@ -113,6 +135,28 @@ async function migrateDay4() {
     );
   `;
 
+  // 7b. In-App Notifications table
+  console.log("7b. Creating in_app_notifications table if not exists...");
+  await sql`
+    CREATE TABLE IF NOT EXISTS in_app_notifications (
+      notification_id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      category VARCHAR(50) NOT NULL DEFAULT 'general',
+      appointment_id INTEGER REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+      action_url VARCHAR(255),
+      is_read BOOLEAN NOT NULL DEFAULT false,
+      read_at TIMESTAMP WITH TIME ZONE,
+      idempotency_key VARCHAR(150) UNIQUE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `;
+  await sql`
+    ALTER TABLE notification_preferences
+    ADD COLUMN IF NOT EXISTS in_app_enabled BOOLEAN NOT NULL DEFAULT true;
+  `;
+
   // 7. Create notification_preferences table
   console.log("7. Creating notification_preferences table if not exists...");
   await sql`
@@ -134,6 +178,28 @@ async function migrateDay4() {
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     );
+  `;
+
+  // 7b. In-App Notifications table
+  console.log("7b. Creating in_app_notifications table if not exists...");
+  await sql`
+    CREATE TABLE IF NOT EXISTS in_app_notifications (
+      notification_id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      category VARCHAR(50) NOT NULL DEFAULT 'general',
+      appointment_id INTEGER REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+      action_url VARCHAR(255),
+      is_read BOOLEAN NOT NULL DEFAULT false,
+      read_at TIMESTAMP WITH TIME ZONE,
+      idempotency_key VARCHAR(150) UNIQUE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `;
+  await sql`
+    ALTER TABLE notification_preferences
+    ADD COLUMN IF NOT EXISTS in_app_enabled BOOLEAN NOT NULL DEFAULT true;
   `;
 
   // 8. Indexes

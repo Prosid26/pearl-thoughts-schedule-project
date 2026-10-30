@@ -32,6 +32,7 @@ const DEFAULT_PREFERENCES: PatientNotificationPreferences = {
   email_enabled: true,
   sms_enabled: true,
   whatsapp_enabled: true,
+  in_app_enabled: true,
   appointment_confirmations: true,
   appointment_reminders: true,
   cancellation_rescheduling: true,
@@ -68,10 +69,11 @@ export function NotificationPreferencesSection({ initialPreferences }: Props) {
   const [showUnsubscribeModal, setShowUnsubscribeModal] = useState(false);
 
   const handleChannelToggle = (
-    channel: "email_enabled" | "sms_enabled" | "whatsapp_enabled"
+    channel: "email_enabled" | "sms_enabled" | "whatsapp_enabled" | "in_app_enabled"
   ) => {
     setPrefs((prev) => {
-      const nextVal = !prev[channel];
+      const currentVal = prev[channel] !== false;
+      const nextVal = !currentVal;
       const next = { ...prev, [channel]: nextVal };
       if (nextVal) {
         next.unsubscribed_all = false;
@@ -104,6 +106,7 @@ export function NotificationPreferencesSection({ initialPreferences }: Props) {
     formData.set("email_enabled", String(prefs.email_enabled));
     formData.set("sms_enabled", String(prefs.sms_enabled));
     formData.set("whatsapp_enabled", String(prefs.whatsapp_enabled));
+    formData.set("in_app_enabled", String(prefs.in_app_enabled !== false));
 
     formData.set(
       "appointment_confirmations",
@@ -230,7 +233,7 @@ export function NotificationPreferencesSection({ initialPreferences }: Props) {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Email Channel */}
             <div
               onClick={() => handleChannelToggle("email_enabled")}
@@ -351,6 +354,47 @@ export function NotificationPreferencesSection({ initialPreferences }: Props) {
               </div>
               <p className="text-xs text-ink-muted leading-relaxed">
                 Official WhatsApp Business appointment cards, reminders, and interactive confirmations.
+              </p>
+            </div>
+
+            {/* In-App / Portal Channel */}
+            <div
+              onClick={() => handleChannelToggle("in_app_enabled")}
+              className={`cursor-pointer p-4 rounded-xl border transition-all ${
+                prefs.in_app_enabled !== false
+                  ? "bg-forest/5 border-forest text-forest shadow-xs"
+                  : "bg-surface border-warm-border text-ink-muted opacity-80"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      prefs.in_app_enabled !== false
+                        ? "bg-forest text-ivory"
+                        : "bg-sand text-ink-muted"
+                    }`}
+                  >
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold block text-ink">
+                      In-App
+                    </span>
+                    <span className="text-[11px] text-ink-muted">
+                      Portal & Bell
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={prefs.in_app_enabled !== false}
+                  onChange={() => {}}
+                  className="rounded border-warm-border text-forest focus:ring-forest w-4 h-4"
+                />
+              </div>
+              <p className="text-xs text-ink-muted leading-relaxed">
+                Live notification bell updates, unread indicators, and clinical notices in your portal.
               </p>
             </div>
           </div>

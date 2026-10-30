@@ -57,6 +57,9 @@ export async function updatePreferencesAction(
     const emailEnabled = formData.get("email_enabled") === "true";
     const smsEnabled = formData.get("sms_enabled") === "true";
     const whatsAppEnabled = formData.get("whatsapp_enabled") === "true";
+    const inAppEnabled = formData.has("in_app_enabled")
+      ? formData.get("in_app_enabled") === "true"
+      : true;
 
     const appointmentConfirmations =
       formData.get("appointment_confirmations") === "true";
@@ -89,12 +92,13 @@ export async function updatePreferencesAction(
     }
 
     // If the patient is turning on any channel, clear the global unsubscribed flag
-    const isEnablingAnyChannel = emailEnabled || smsEnabled || whatsAppEnabled;
+    const isEnablingAnyChannel = emailEnabled || smsEnabled || whatsAppEnabled || inAppEnabled;
 
     const updated = await db.updateNotificationPreferences(session.user_id, {
       email_enabled: emailEnabled,
       sms_enabled: smsEnabled,
       whatsapp_enabled: whatsAppEnabled,
+      in_app_enabled: inAppEnabled,
       appointment_confirmations: appointmentConfirmations,
       appointment_reminders: appointmentReminders,
       cancellation_rescheduling: cancellationRescheduling,

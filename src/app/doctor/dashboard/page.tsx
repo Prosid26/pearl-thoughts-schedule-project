@@ -13,6 +13,7 @@ import {
   Sparkles,
   Users,
   Clock,
+  Bell,
 } from "lucide-react";
 import { DoctorAvatar } from "@/components/doctor/DoctorAvatar";
 import { formatINR } from "@/lib/utils/currency";
@@ -73,6 +74,14 @@ export default async function DoctorDashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/doctor/notifications"
+            className="btn-ivory text-xs px-3.5 py-2.5 gap-1.5"
+            title="View Notifications"
+          >
+            <Bell className="w-4 h-4 text-forest" />
+            <span>Notices</span>
+          </Link>
           <Link
             href="/doctor/availability"
             className="btn-forest text-xs px-4 py-2.5 gap-2"

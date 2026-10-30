@@ -143,14 +143,31 @@ export type NotificationType =
   | "rescheduled"
   | "general";
 
+export type InAppNotificationCategory =
+  | "booking"
+  | "cancellation"
+  | "reschedule"
+  | "payment"
+  | "refund"
+  | "reminder"
+  | "alert"
+  | "offer"
+  | "system"
+  | "general";
+
 export interface InAppNotification {
   notification_id: number;
   user_id: number;
   title: string;
   message: string;
-  type: NotificationType;
+  category?: InAppNotificationCategory;
+  type?: NotificationType;
+  appointment_id?: number | null;
+  action_url?: string | null;
   related_offer_id?: number | null;
   is_read: boolean;
+  read_at?: string | null;
+  idempotency_key?: string | null;
   created_at: string;
   offer?: EarlySlotOffer;
 }
@@ -254,6 +271,7 @@ export interface PatientNotificationPreferences {
   email_enabled: boolean;
   sms_enabled: boolean;
   whatsapp_enabled: boolean;
+  in_app_enabled: boolean;
   appointment_confirmations: boolean;
   appointment_reminders: boolean;
   cancellation_rescheduling: boolean;

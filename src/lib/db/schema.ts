@@ -8,6 +8,7 @@ import {
   boolean,
   timestamp,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -463,6 +464,7 @@ export const notificationPreferences = pgTable("notification_preferences", {
   email_enabled: boolean("email_enabled").notNull().default(true),
   sms_enabled: boolean("sms_enabled").notNull().default(true),
   whatsapp_enabled: boolean("whatsapp_enabled").notNull().default(true),
+  in_app_enabled: boolean("in_app_enabled").notNull().default(true),
   // Categories
   appointment_confirmations: boolean("appointment_confirmations").notNull().default(true),
   appointment_reminders: boolean("appointment_reminders").notNull().default(true),
@@ -488,6 +490,56 @@ export const notificationPreferencesRelations = relations(
     }),
   })
 );
+
+/**
+ * 15. IN-APP NOTIFICATIONS TABLE
+ * Dedicated persistent notifications for Patients and Doctors
+ */
+export const inAppNotifications = pgTable(
+  "in_app_notifications",
+  {
+    notification_id: serial("notification_id").primaryKey(),
+    user_id: integer("user_id")
+      .notNull()
+      .references(() => users.user_id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    message: text("message").notNull(),
+    category: varchar("category", { length: 50 }).notNull().default("general"),
+    appointment_id: integer("appointment_id").references(
+      () => appointments.appointment_id,
+      { onDelete: "set null" }
+    ),
+    action_url: varchar("action_url", { length: 255 }),
+    is_read: boolean("is_read").notNull().default(false),
+    read_at: timestamp("read_at", { withTimezone: true }),
+    idempotency_key: varchar("idempotency_key", { length: 150 }).unique(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("idx_in_app_notif_user").on(table.user_id),
+    index("idx_in_app_notif_appt").on(table.appointment_id),
+    index("idx_in_app_notif_is_read").on(table.is_read),
+  ]
+);
+
+export const inAppNotificationsRelations = relations(
+  inAppNotifications,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [inAppNotifications.user_id],
+      references: [users.user_id],
+    }),
+    appointment: one(appointments, {
+      fields: [inAppNotifications.appointment_id],
+      references: [appointments.appointment_id],
+    }),
+  })
+);
+
+export type InAppNotificationSelect = typeof inAppNotifications.$inferSelect;
+export type InAppNotificationInsert = typeof inAppNotifications.$inferInsert;
 
 export type UserSelect = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;

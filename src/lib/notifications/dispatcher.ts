@@ -366,26 +366,7 @@ export async function sendClinicalNotification(
     }
   }
 
-  // 6. Mirror into In-App Notifications for Real-Time Notification Center
-  try {
-    let notifType: any = "general";
-    if (
-      eventType === "appointment_rescheduled" ||
-      eventType === "doctor_reschedule_alert"
-    ) {
-      notifType = "rescheduled";
-    }
-    await db.createInAppNotification({
-      userId: payload.userId,
-      title: rendered.subject,
-      message: rendered.text.slice(0, 300),
-      type: notifType,
-    });
-  } catch {
-    // Non-critical in-app mirror
-  }
-
-  // Determine primary success
+  // Determine external provider delivery results
   const primaryDispatched =
     emailResult !== undefined ||
     smsResult !== undefined ||
@@ -395,6 +376,98 @@ export async function sendClinicalNotification(
     (emailResult && !emailResult.success) ||
     (smsResult && !smsResult.success) ||
     (whatsAppResult && !whatsAppResult.success);
+
+  // 6. Mirror into Persistent In-App Notifications
+  try {
+    let category: any = "general";
+    if (eventType === "booking_confirmed" || eventType === "doctor_booking_alert") {
+      category = "booking";
+    } else if (
+      eventType === "appointment_cancelled" ||
+      eventType === "doctor_cancellation_alert"
+    ) {
+      category = "cancellation";
+    } else if (
+      eventType === "appointment_rescheduled" ||
+      eventType === "doctor_reschedule_alert"
+    ) {
+      category = "reschedule";
+    } else if (eventType === "payment_success" || eventType === "payment_failed") {
+      category = "payment";
+    } else if (
+      eventType === "refund_requested" ||
+      eventType === "refund_processed" ||
+      eventType === "refund_failed"
+    ) {
+      category = "refund";
+    } else if (eventType === "appointment_reminder") {
+      category = "reminder";
+    }
+
+    let actionUrl: string | undefined = undefined;
+    if (isDoctorEvent(eventType)) {
+      actionUrl = "/doctor/appointments";
+    } else if (payload.appointmentId) {
+      if (eventType === "booking_confirmed" || eventType === "payment_success") {
+        actionUrl = `/booking-confirmation?id=${payload.appointmentId}`;
+      } else {
+        actionUrl = "/patient/appointments";
+      }
+    } else {
+      actionUrl = "/patient/appointments";
+    }
+
+    // Check user preference for in-app notifications
+    let allowInApp = true;
+    if (!isDoctorEvent(eventType) && payload.userId) {
+      try {
+        const prefs = await db.getNotificationPreferences(payload.userId);
+        if (prefs && prefs.in_app_enabled === false) {
+          allowInApp = false;
+        }
+      } catch {
+        allowInApp = true;
+      }
+    }
+
+    if (allowInApp && payload.userId) {
+      await db.createInAppNotification({
+        userId: payload.userId,
+        title: rendered.subject,
+        message: rendered.text.slice(0, 300),
+        category,
+        appointmentId: payload.appointmentId || null,
+        actionUrl,
+        idempotencyKey: `${idempotencyBase}_inapp`,
+        type: category === "reschedule" ? "rescheduled" : "general",
+      });
+    }
+
+    // 6b. Delivery failure alert: if an external channel failed, record in-app alert
+    if (
+      anyFailed &&
+      payload.userId &&
+      allowInApp &&
+      !isDoctorEvent(eventType)
+    ) {
+      const failReason =
+        emailResult?.error || smsResult?.error || whatsAppResult?.error || "Delivery error";
+      await db
+        .createInAppNotification({
+          userId: payload.userId,
+          title: "Important: External Notification Delivery Notice",
+          message: `We could not deliver your SMS/email notification to your registered contact. Please check your contact details in Profile. Details: ${failReason.slice(0, 100)}`,
+          category: "alert",
+          appointmentId: payload.appointmentId || null,
+          actionUrl: "/patient/profile",
+          idempotencyKey: `${idempotencyBase}_delivery_alert`,
+          type: "general",
+        })
+        .catch(() => {});
+    }
+  } catch (inAppErr) {
+    console.warn("[IN-APP-NOTIF-MIRROR-ERROR]", inAppErr);
+  }
 
   const activeChannel =
     targetChannel === "all"

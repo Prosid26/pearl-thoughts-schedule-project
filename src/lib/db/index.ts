@@ -21,6 +21,7 @@ import {
   EarlySlotOffer,
   NotificationType,
   InAppNotification,
+  InAppNotificationCategory,
   Payment,
   PaymentStatus,
   AppointmentPaymentStatus,
@@ -2694,32 +2695,196 @@ export const db = {
     userId: number;
     title: string;
     message: string;
+    category?: InAppNotificationCategory;
+    appointmentId?: number | null;
+    actionUrl?: string | null;
+    idempotencyKey?: string | null;
     type?: NotificationType;
     relatedOfferId?: number | null;
   }): Promise<InAppNotification> => {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
+        if (params.idempotencyKey) {
+          const existing = await neonDb
+            .select()
+            .from(schema.inAppNotifications)
+            .where(eq(schema.inAppNotifications.idempotency_key, params.idempotencyKey))
+            .limit(1);
+          if (existing.length > 0) {
+            const e = existing[0];
+            return {
+              notification_id: e.notification_id,
+              user_id: e.user_id,
+              title: e.title,
+              message: e.message,
+              category: e.category as InAppNotificationCategory,
+              appointment_id: e.appointment_id,
+              action_url: e.action_url,
+              is_read: e.is_read,
+              read_at: e.read_at?.toISOString() || null,
+              idempotency_key: e.idempotency_key,
+              created_at: e.created_at.toISOString(),
+            };
+          }
+        }
+
         const inserted = await neonDb
-          .insert(schema.notifications)
+          .insert(schema.inAppNotifications)
           .values({
             user_id: params.userId,
             title: params.title,
             message: params.message,
-            type: params.type || "general",
-            related_offer_id: params.relatedOfferId || null,
+            category: params.category || "general",
+            appointment_id: params.appointmentId || null,
+            action_url: params.actionUrl || null,
             is_read: false,
+            idempotency_key: params.idempotencyKey || null,
           })
           .returning();
         const n = inserted[0];
+
+        // Also keep legacy notifications table populated if relatedOfferId is set (for backwards compat)
+        if (params.relatedOfferId) {
+          await neonDb
+            .insert(schema.notifications)
+            .values({
+              user_id: params.userId,
+              title: params.title,
+              message: params.message,
+              type: params.type || "early_offer",
+              related_offer_id: params.relatedOfferId,
+              is_read: false,
+            })
+            .catch(() => {});
+        }
+
         return {
-          ...n,
-          type: n.type as NotificationType,
+          notification_id: n.notification_id,
+          user_id: n.user_id,
+          title: n.title,
+          message: n.message,
+          category: n.category as InAppNotificationCategory,
+          appointment_id: n.appointment_id,
+          action_url: n.action_url,
+          is_read: n.is_read,
+          read_at: n.read_at?.toISOString() || null,
+          idempotency_key: n.idempotency_key,
           created_at: n.created_at.toISOString(),
         };
       }
     }
     return localDb.createInAppNotification(params);
+  },
+
+  getInAppNotificationsForUser: async (
+    userId: number,
+    optionsOrLimit?: number | { unreadOnly?: boolean; limit?: number }
+  ): Promise<InAppNotification[]> => {
+    const resolvedLimit =
+      typeof optionsOrLimit === "number"
+        ? optionsOrLimit
+        : typeof optionsOrLimit === "object" && optionsOrLimit !== null
+        ? optionsOrLimit.limit ?? 50
+        : 50;
+    const unreadOnly =
+      typeof optionsOrLimit === "object" && optionsOrLimit !== null
+        ? optionsOrLimit.unreadOnly === true
+        : false;
+
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const conditions = [eq(schema.inAppNotifications.user_id, userId)];
+        if (unreadOnly) {
+          conditions.push(eq(schema.inAppNotifications.is_read, false));
+        }
+
+        const rows = await neonDb
+          .select()
+          .from(schema.inAppNotifications)
+          .where(and(...conditions))
+          .orderBy(desc(schema.inAppNotifications.created_at))
+          .limit(resolvedLimit);
+
+        return rows.map((r) => ({
+          notification_id: r.notification_id,
+          user_id: r.user_id,
+          title: r.title,
+          message: r.message,
+          category: r.category as InAppNotificationCategory,
+          appointment_id: r.appointment_id,
+          action_url: r.action_url,
+          is_read: r.is_read,
+          read_at: r.read_at?.toISOString() || null,
+          idempotency_key: r.idempotency_key,
+          created_at: r.created_at.toISOString(),
+        }));
+      }
+    }
+    return localDb.getInAppNotificationsForUser(userId, optionsOrLimit);
+  },
+
+  getUnreadInAppNotificationCount: async (userId: number): Promise<number> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select({ id: schema.inAppNotifications.notification_id })
+          .from(schema.inAppNotifications)
+          .where(
+            and(
+              eq(schema.inAppNotifications.user_id, userId),
+              eq(schema.inAppNotifications.is_read, false)
+            )
+          );
+        return rows.length;
+      }
+    }
+    return localDb.getUnreadInAppNotificationCount(userId);
+  },
+
+  markInAppNotificationRead: async (
+    notificationId: number,
+    userId: number
+  ): Promise<boolean> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const res = await neonDb
+          .update(schema.inAppNotifications)
+          .set({ is_read: true, read_at: new Date() })
+          .where(
+            and(
+              eq(schema.inAppNotifications.notification_id, notificationId),
+              eq(schema.inAppNotifications.user_id, userId)
+            )
+          )
+          .returning();
+        return res.length > 0;
+      }
+    }
+    return localDb.markInAppNotificationRead(notificationId, userId);
+  },
+
+  markAllInAppNotificationsRead: async (userId: number): Promise<number> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const res = await neonDb
+          .update(schema.inAppNotifications)
+          .set({ is_read: true, read_at: new Date() })
+          .where(
+            and(
+              eq(schema.inAppNotifications.user_id, userId),
+              eq(schema.inAppNotifications.is_read, false)
+            )
+          )
+          .returning();
+        return res.length;
+      }
+    }
+    return localDb.markAllInAppNotificationsRead(userId);
   },
 
   // --- Scheduled Reminders ---

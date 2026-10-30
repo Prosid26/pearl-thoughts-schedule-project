@@ -28,6 +28,7 @@ import {
   NotificationLog,
   ScheduledReminder,
   PatientNotificationPreferences,
+  InAppNotificationCategory,
 } from "@/types/database";
 
 interface DatabaseState {
@@ -39,6 +40,7 @@ interface DatabaseState {
   waitingQueue: WaitingQueueEntry[];
   earlySlotOffers: EarlySlotOffer[];
   notifications: InAppNotification[];
+  inAppNotifications: InAppNotification[];
   payments: Payment[];
   refunds: Refund[];
   webhookEvents: WebhookEvent[];
@@ -576,6 +578,7 @@ function generateInitialSeed(): DatabaseState {
     waitingQueue,
     earlySlotOffers: [],
     notifications: [],
+    inAppNotifications: [],
     payments: [],
     refunds: [],
     webhookEvents: [],
@@ -629,6 +632,7 @@ class LocalDatabase {
           if (!parsed.waitingQueue) parsed.waitingQueue = [];
           if (!parsed.earlySlotOffers) parsed.earlySlotOffers = [];
           if (!parsed.notifications) parsed.notifications = [];
+          if (!parsed.inAppNotifications) parsed.inAppNotifications = [];
           if (!parsed.payments) parsed.payments = [];
           if (!parsed.refunds) parsed.refunds = [];
           if (!parsed.webhookEvents) parsed.webhookEvents = [];
@@ -2413,9 +2417,20 @@ class LocalDatabase {
     userId: number;
     title: string;
     message: string;
+    category?: InAppNotificationCategory;
+    appointmentId?: number | null;
+    actionUrl?: string | null;
+    idempotencyKey?: string | null;
     type?: NotificationType;
     relatedOfferId?: number | null;
   }): InAppNotification {
+    if (params.idempotencyKey) {
+      const existing = this.state.inAppNotifications.find(
+        (n) => n.idempotency_key === params.idempotencyKey
+      );
+      if (existing) return existing;
+    }
+
     this.state.counters.notificationId =
       (this.state.counters.notificationId || 0) + 1;
     const notif: InAppNotification = {
@@ -2423,14 +2438,87 @@ class LocalDatabase {
       user_id: params.userId,
       title: params.title,
       message: params.message,
+      category: params.category || "general",
       type: params.type || "general",
-      related_offer_id: params.relatedOfferId || null,
+      appointment_id: params.appointmentId ?? null,
+      action_url: params.actionUrl ?? null,
+      related_offer_id: params.relatedOfferId ?? null,
       is_read: false,
+      read_at: null,
+      idempotency_key: params.idempotencyKey ?? null,
       created_at: new Date().toISOString(),
     };
+    this.state.inAppNotifications.unshift(notif);
     this.state.notifications.unshift(notif);
     this.commit();
     return notif;
+  }
+
+  public getInAppNotificationsForUser(
+    userId: number,
+    optionsOrLimit?: number | { unreadOnly?: boolean; limit?: number }
+  ): InAppNotification[] {
+    const resolvedLimit =
+      typeof optionsOrLimit === "number"
+        ? optionsOrLimit
+        : typeof optionsOrLimit === "object" && optionsOrLimit !== null
+        ? optionsOrLimit.limit ?? 50
+        : 50;
+    const unreadOnly =
+      typeof optionsOrLimit === "object" && optionsOrLimit !== null
+        ? optionsOrLimit.unreadOnly === true
+        : false;
+
+    return this.state.inAppNotifications
+      .filter((n) => n.user_id === userId && (!unreadOnly || !n.is_read))
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      .slice(0, resolvedLimit);
+  }
+
+  public getUnreadInAppNotificationCount(userId: number): number {
+    return this.state.inAppNotifications.filter(
+      (n) => n.user_id === userId && !n.is_read
+    ).length;
+  }
+
+  public markInAppNotificationRead(
+    notificationId: number,
+    userId: number
+  ): boolean {
+    const notif = this.state.inAppNotifications.find(
+      (n) => n.notification_id === notificationId && n.user_id === userId
+    );
+    if (notif) {
+      notif.is_read = true;
+      notif.read_at = new Date().toISOString();
+      const legacy = this.state.notifications.find(
+        (n) => n.notification_id === notificationId
+      );
+      if (legacy) legacy.is_read = true;
+      this.commit();
+      return true;
+    }
+    return false;
+  }
+
+  public markAllInAppNotificationsRead(userId: number): number {
+    const unread = this.state.inAppNotifications.filter(
+      (n) => n.user_id === userId && !n.is_read
+    );
+    const now = new Date().toISOString();
+    for (const n of unread) {
+      n.is_read = true;
+      n.read_at = now;
+      const legacy = this.state.notifications.find(
+        (l) => l.notification_id === n.notification_id
+      );
+      if (legacy) legacy.is_read = true;
+    }
+    this.commit();
+    return unread.length;
   }
 
   // --- Scheduled Reminders ---
@@ -2553,6 +2641,7 @@ class LocalDatabase {
       email_enabled: true,
       sms_enabled: true,
       whatsapp_enabled: true,
+      in_app_enabled: true,
       appointment_confirmations: true,
       appointment_reminders: true,
       cancellation_rescheduling: true,

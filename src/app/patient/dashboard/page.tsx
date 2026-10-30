@@ -14,6 +14,7 @@ import {
   PlusCircle,
   ArrowRight,
   MapPin,
+  Bell,
 } from "lucide-react";
 import { EarlySlotOfferBanner } from "@/components/patient/EarlySlotOfferBanner";
 import { PatientNotificationsPanel } from "@/components/patient/PatientNotificationsPanel";
@@ -74,6 +75,14 @@ export default async function PatientDashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/patient/notifications"
+            className="btn-ivory text-xs px-3.5 py-2.5 gap-1.5"
+            title="View Notifications"
+          >
+            <Bell className="w-4 h-4 text-forest" />
+            <span>Notices</span>
+          </Link>
           <Link
             href="/doctors"
             className="btn-forest text-xs px-4 py-2.5 gap-2"

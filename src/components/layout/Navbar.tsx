@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth.actions";
 import { DemoSwitcher } from "./DemoSwitcher";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SessionUser } from "@/types/database";
 
 interface NavbarProps {
@@ -116,6 +117,9 @@ export function Navbar({ session, dbMode }: NavbarProps) {
             {/* User Session Buttons */}
             {session ? (
               <div className="flex items-center gap-2 pl-2 border-l border-warm-border">
+                {/* Real-time In-App Notification Bell */}
+                <NotificationBell sessionRole={session.role} />
+
                 {session.role === "doctor" ? (
                   <>
                     <Link
@@ -240,8 +244,9 @@ export function Navbar({ session, dbMode }: NavbarProps) {
 
             {session ? (
               <div className="pt-3 border-t border-warm-border space-y-2">
-                <div className="px-3 py-1 text-xs text-ink-muted">
-                  Signed in as <strong>{session.full_name}</strong> ({session.role})
+                <div className="px-3 py-1 text-xs text-ink-muted flex items-center justify-between">
+                  <span>Signed in as <strong>{session.full_name}</strong> ({session.role})</span>
+                  <NotificationBell sessionRole={session.role} />
                 </div>
                 {session.role === "doctor" ? (
                   <>
