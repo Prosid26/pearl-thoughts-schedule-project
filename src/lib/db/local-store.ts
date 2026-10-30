@@ -2476,18 +2476,48 @@ class LocalDatabase {
     this.commit();
   }
 
-  public getDueScheduledReminders(): ScheduledReminder[] {
+  public getDueScheduledReminders(limit?: number): ScheduledReminder[] {
+    const now = Date.now();
+    const staleProcessingThreshold = now - 5 * 60 * 1000;
+    const list = this.state.scheduledReminders.filter(
+      (r) =>
+        (r.status === "scheduled" ||
+          (r.status === "processing" &&
+            new Date(r.updated_at).getTime() < staleProcessingThreshold)) &&
+        new Date(r.scheduled_for).getTime() <= now
+    );
+    return typeof limit === "number" ? list.slice(0, limit) : list;
+  }
+
+  public claimScheduledReminder(reminderId: number): boolean {
+    const now = Date.now();
+    const staleProcessingThreshold = now - 5 * 60 * 1000;
+    const r = this.state.scheduledReminders.find((x) => x.reminder_id === reminderId);
+    if (!r) return false;
+    const isAvailable =
+      r.status === "scheduled" ||
+      (r.status === "processing" &&
+        new Date(r.updated_at).getTime() < staleProcessingThreshold);
+    if (!isAvailable) return false;
+
+    r.status = "processing";
+    r.updated_at = new Date().toISOString();
+    this.commit();
+    return true;
+  }
+
+  public countDueScheduledReminders(): number {
     const now = Date.now();
     return this.state.scheduledReminders.filter(
       (r) =>
         r.status === "scheduled" &&
         new Date(r.scheduled_for).getTime() <= now
-    );
+    ).length;
   }
 
   public updateReminderStatus(
     reminderId: number,
-    status: "scheduled" | "sent" | "cancelled" | "failed",
+    status: "scheduled" | "processing" | "sent" | "cancelled" | "failed",
     errorMessage?: string
   ): void {
     const r = this.state.scheduledReminders.find((x) => x.reminder_id === reminderId);

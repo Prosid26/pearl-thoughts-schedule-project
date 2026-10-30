@@ -50,18 +50,34 @@ export async function cancelAppointmentReminders(appointmentId: number): Promise
 }
 
 /**
- * Background / Cron runner: Process and dispatch due reminders idempotently
+ * Background / External Scheduled runner: Process and dispatch due reminders idempotently
  */
-export async function processDueReminders(): Promise<{
+export async function processDueReminders(options?: {
+  batchSize?: number;
+}): Promise<{
   processedCount: number;
   sentCount: number;
   skippedCount: number;
+  failedCount: number;
+  batchSize: number;
+  remainingDue: number;
 }> {
-  const dueReminders = await db.getDueScheduledReminders();
+  const batchSize = options?.batchSize ?? 25;
+  const dueReminders = await db.getDueScheduledReminders(batchSize);
+  let processedCount = 0;
   let sentCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
 
   for (const reminder of dueReminders) {
+    // 1. Atomic Locking: Claim this reminder to prevent duplicate processing by concurrent requests
+    const claimed = await db.claimScheduledReminder(reminder.reminder_id);
+    if (!claimed) {
+      // Already claimed by another concurrent worker or already processed
+      continue;
+    }
+    processedCount++;
+
     const appointment = await db.getAppointmentById(reminder.appointment_id);
 
     // Rule: Do not send appointment reminders for cancelled or completed appointments
@@ -79,6 +95,7 @@ export async function processDueReminders(): Promise<{
     const patientUser = appointment.patient?.user;
     if (!patientUser?.email) {
       await db.updateReminderStatus(reminder.reminder_id, "failed", "Missing recipient email");
+      failedCount++;
       skippedCount++;
       continue;
     }
@@ -121,12 +138,18 @@ export async function processDueReminders(): Promise<{
       sentCount++;
     } else {
       await db.updateReminderStatus(reminder.reminder_id, "failed", res.error);
+      failedCount++;
     }
   }
 
+  const remainingDue = await db.countDueScheduledReminders();
+
   return {
-    processedCount: dueReminders.length,
+    processedCount,
     sentCount,
     skippedCount,
+    failedCount,
+    batchSize,
+    remainingDue,
   };
 }

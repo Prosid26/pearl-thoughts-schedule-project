@@ -1,7 +1,7 @@
 import { localDb } from "./local-store";
 import { isNeonConfigured, getNeonDb } from "./neon";
 import * as schema from "./schema";
-import { eq, and, gt, gte, desc, asc, sql } from "drizzle-orm";
+import { eq, and, or, gt, gte, desc, asc, sql } from "drizzle-orm";
 import { isSlotInPast, getTodayIST } from "@/lib/utils/date";
 import {
   generateDoctorSlotsForDate,
@@ -2791,19 +2791,28 @@ export const db = {
     return localDb.cancelRemindersForAppointment(appointmentId);
   },
 
-  getDueScheduledReminders: async (): Promise<ScheduledReminder[]> => {
+  getDueScheduledReminders: async (limit?: number): Promise<ScheduledReminder[]> => {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const rows = await neonDb
+        let query = neonDb
           .select()
           .from(schema.scheduledReminders)
           .where(
             and(
-              eq(schema.scheduledReminders.status, "scheduled"),
+              or(
+                eq(schema.scheduledReminders.status, "scheduled"),
+                and(
+                  eq(schema.scheduledReminders.status, "processing"),
+                  sql`${schema.scheduledReminders.updated_at} < NOW() - INTERVAL '5 minutes'`
+                )
+              ),
               sql`${schema.scheduledReminders.scheduled_for} <= NOW()`
             )
-          );
+          )
+          .orderBy(schema.scheduledReminders.scheduled_for);
+
+        const rows = typeof limit === "number" ? await query.limit(limit) : await query;
         return rows.map((r) => ({
           ...r,
           status: r.status as any,
@@ -2814,12 +2823,60 @@ export const db = {
         }));
       }
     }
-    return localDb.getDueScheduledReminders();
+    return localDb.getDueScheduledReminders(limit);
+  },
+
+  claimScheduledReminder: async (reminderId: number): Promise<boolean> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .update(schema.scheduledReminders)
+          .set({
+            status: "processing",
+            updated_at: new Date(),
+          })
+          .where(
+            and(
+              eq(schema.scheduledReminders.reminder_id, reminderId),
+              or(
+                eq(schema.scheduledReminders.status, "scheduled"),
+                and(
+                  eq(schema.scheduledReminders.status, "processing"),
+                  sql`${schema.scheduledReminders.updated_at} < NOW() - INTERVAL '5 minutes'`
+                )
+              )
+            )
+          )
+          .returning({ reminder_id: schema.scheduledReminders.reminder_id });
+        return rows.length > 0;
+      }
+    }
+    return localDb.claimScheduledReminder(reminderId);
+  },
+
+  countDueScheduledReminders: async (): Promise<number> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const rows = await neonDb
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.scheduledReminders)
+          .where(
+            and(
+              eq(schema.scheduledReminders.status, "scheduled"),
+              sql`${schema.scheduledReminders.scheduled_for} <= NOW()`
+            )
+          );
+        return Number(rows[0]?.count || 0);
+      }
+    }
+    return localDb.countDueScheduledReminders();
   },
 
   updateReminderStatus: async (
     reminderId: number,
-    status: "scheduled" | "sent" | "cancelled" | "failed",
+    status: "scheduled" | "processing" | "sent" | "cancelled" | "failed",
     errorMessage?: string
   ): Promise<void> => {
     if (isNeonConfigured) {

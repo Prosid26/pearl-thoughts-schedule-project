@@ -241,7 +241,7 @@ export interface ScheduledReminder {
   appointment_id: number;
   reminder_type: string; // '24h_before' | '2h_before'
   scheduled_for: string; // ISO datetime
-  status: "scheduled" | "sent" | "cancelled" | "failed";
+  status: "scheduled" | "processing" | "sent" | "cancelled" | "failed";
   sent_at?: string | null;
   error_message?: string | null;
   created_at: string;
