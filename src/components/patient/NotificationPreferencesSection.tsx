@@ -23,12 +23,42 @@ import {
 } from "lucide-react";
 
 interface Props {
-  initialPreferences: PatientNotificationPreferences;
+  initialPreferences?: PatientNotificationPreferences | null;
 }
 
+const DEFAULT_PREFERENCES: PatientNotificationPreferences = {
+  preference_id: 0,
+  user_id: 0,
+  email_enabled: true,
+  sms_enabled: true,
+  whatsapp_enabled: true,
+  appointment_confirmations: true,
+  appointment_reminders: true,
+  cancellation_rescheduling: true,
+  payment_confirmations: true,
+  refund_updates: true,
+  unsubscribed_all: false,
+  sms_consent: true,
+  whatsapp_consent: true,
+  consent_timestamp: null,
+  created_at: "",
+  updated_at: "",
+};
+
 export function NotificationPreferencesSection({ initialPreferences }: Props) {
-  const [prefs, setPrefs] =
-    useState<PatientNotificationPreferences>(initialPreferences);
+  const [prefs, setPrefs] = useState<PatientNotificationPreferences>(() => ({
+    ...DEFAULT_PREFERENCES,
+    ...(initialPreferences || {}),
+  }));
+
+  React.useEffect(() => {
+    if (initialPreferences) {
+      setPrefs((prev) => ({
+        ...prev,
+        ...initialPreferences,
+      }));
+    }
+  }, [initialPreferences]);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
     message: string;

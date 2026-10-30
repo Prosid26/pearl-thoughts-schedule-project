@@ -25,12 +25,24 @@ export default async function PatientDashboardPage() {
   if (!session) {
     redirect("/auth/sign-in?redirect=/patient/dashboard");
   }
-  if (session.role !== "patient" || !session.patient_id) {
+  if (session.role !== "patient") {
     redirect("/doctor/dashboard");
   }
 
-  const appointments = await db.getAppointmentsForPatient(session.patient_id);
-  const initialOffer = await db.getActiveOfferForPatient(session.patient_id);
+  let patientId = session.patient_id;
+  if (!patientId) {
+    const patientRecord = await db.getPatientByUserId(session.user_id);
+    if (patientRecord) {
+      patientId = patientRecord.patient_id;
+    }
+  }
+
+  if (!patientId) {
+    redirect("/doctor/dashboard");
+  }
+
+  const appointments = await db.getAppointmentsForPatient(patientId);
+  const initialOffer = await db.getActiveOfferForPatient(patientId);
   const preferences = await db.getNotificationPreferences(session.user_id);
 
   const upcomingAppointments = appointments.filter((a) => {

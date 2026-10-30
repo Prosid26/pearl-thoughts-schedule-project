@@ -2904,48 +2904,54 @@ export const db = {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const rows = await neonDb
-          .select()
-          .from(schema.notificationPreferences)
-          .where(eq(schema.notificationPreferences.user_id, userId))
-          .limit(1);
+        try {
+          const rows = await neonDb
+            .select()
+            .from(schema.notificationPreferences)
+            .where(eq(schema.notificationPreferences.user_id, userId))
+            .limit(1);
 
-        if (rows.length > 0) {
-          const r = rows[0];
-          return {
-            ...r,
-            consent_timestamp: r.consent_timestamp ? r.consent_timestamp.toISOString() : null,
-            created_at: r.created_at.toISOString(),
-            updated_at: r.updated_at.toISOString(),
-          };
+          if (rows.length > 0) {
+            const r = rows[0];
+            return {
+              ...r,
+              consent_timestamp: r.consent_timestamp ? r.consent_timestamp.toISOString() : null,
+              created_at: r.created_at.toISOString(),
+              updated_at: r.updated_at.toISOString(),
+            };
+          }
+
+          // Insert defaults
+          const inserted = await neonDb
+            .insert(schema.notificationPreferences)
+            .values({
+              user_id: userId,
+              email_enabled: true,
+              sms_enabled: true,
+              whatsapp_enabled: true,
+              appointment_confirmations: true,
+              appointment_reminders: true,
+              cancellation_rescheduling: true,
+              payment_confirmations: true,
+              refund_updates: true,
+              unsubscribed_all: false,
+              sms_consent: true,
+              whatsapp_consent: true,
+            })
+            .returning();
+
+          if (inserted.length > 0) {
+            const r = inserted[0];
+            return {
+              ...r,
+              consent_timestamp: r.consent_timestamp ? r.consent_timestamp.toISOString() : null,
+              created_at: r.created_at.toISOString(),
+              updated_at: r.updated_at.toISOString(),
+            };
+          }
+        } catch (err) {
+          console.error("Neon getNotificationPreferences failed, falling back to localDb:", err);
         }
-
-        // Insert defaults
-        const inserted = await neonDb
-          .insert(schema.notificationPreferences)
-          .values({
-            user_id: userId,
-            email_enabled: true,
-            sms_enabled: true,
-            whatsapp_enabled: true,
-            appointment_confirmations: true,
-            appointment_reminders: true,
-            cancellation_rescheduling: true,
-            payment_confirmations: true,
-            refund_updates: true,
-            unsubscribed_all: false,
-            sms_consent: true,
-            whatsapp_consent: true,
-          })
-          .returning();
-
-        const r = inserted[0];
-        return {
-          ...r,
-          consent_timestamp: r.consent_timestamp ? r.consent_timestamp.toISOString() : null,
-          created_at: r.created_at.toISOString(),
-          updated_at: r.updated_at.toISOString(),
-        };
       }
     }
     return localDb.getNotificationPreferences(userId);
@@ -2958,31 +2964,35 @@ export const db = {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const existing = await db.getNotificationPreferences(userId);
-        const setValues: any = {
-          ...updates,
-          updated_at: new Date(),
-        };
-        if (updates.consent_timestamp !== undefined) {
-          setValues.consent_timestamp = updates.consent_timestamp
-            ? new Date(updates.consent_timestamp)
-            : null;
-        }
-
-        const updated = await neonDb
-          .update(schema.notificationPreferences)
-          .set(setValues)
-          .where(eq(schema.notificationPreferences.user_id, userId))
-          .returning();
-
-        if (updated.length > 0) {
-          const r = updated[0];
-          return {
-            ...r,
-            consent_timestamp: r.consent_timestamp ? r.consent_timestamp.toISOString() : null,
-            created_at: r.created_at.toISOString(),
-            updated_at: r.updated_at.toISOString(),
+        try {
+          const existing = await db.getNotificationPreferences(userId);
+          const setValues: any = {
+            ...updates,
+            updated_at: new Date(),
           };
+          if (updates.consent_timestamp !== undefined) {
+            setValues.consent_timestamp = updates.consent_timestamp
+              ? new Date(updates.consent_timestamp)
+              : null;
+          }
+
+          const updated = await neonDb
+            .update(schema.notificationPreferences)
+            .set(setValues)
+            .where(eq(schema.notificationPreferences.user_id, userId))
+            .returning();
+
+          if (updated.length > 0) {
+            const r = updated[0];
+            return {
+              ...r,
+              consent_timestamp: r.consent_timestamp ? r.consent_timestamp.toISOString() : null,
+              created_at: r.created_at.toISOString(),
+              updated_at: r.updated_at.toISOString(),
+            };
+          }
+        } catch (err) {
+          console.error("Neon updateNotificationPreferences failed, falling back to localDb:", err);
         }
       }
     }
@@ -2995,22 +3005,26 @@ export const db = {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const pref = await db.updateNotificationPreferences(userId, {
-          unsubscribed_all: true,
-          email_enabled: false,
-          sms_enabled: false,
-          whatsapp_enabled: false,
-        });
+        try {
+          const pref = await db.updateNotificationPreferences(userId, {
+            unsubscribed_all: true,
+            email_enabled: false,
+            sms_enabled: false,
+            whatsapp_enabled: false,
+          });
 
-        // Cancel scheduled reminders for patient
-        const patient = await db.getPatientByUserId(userId);
-        if (patient) {
-          const appts = await db.getAppointmentsForPatient(patient.patient_id);
-          for (const a of appts) {
-            await db.cancelRemindersForAppointment(a.appointment_id);
+          // Cancel scheduled reminders for patient
+          const patient = await db.getPatientByUserId(userId);
+          if (patient) {
+            const appts = await db.getAppointmentsForPatient(patient.patient_id);
+            for (const a of appts) {
+              await db.cancelRemindersForAppointment(a.appointment_id);
+            }
           }
+          return pref;
+        } catch (err) {
+          console.error("Neon unsubscribeAll failed, falling back to localDb:", err);
         }
-        return pref;
       }
     }
     return localDb.unsubscribeAll(userId);
@@ -3023,26 +3037,30 @@ export const db = {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const cleanTarget = phone.replace(/\D/g, "");
-        const allUsers = await neonDb.select().from(schema.users);
-        const user = allUsers.find((u) => {
-          const uClean = u.phone.replace(/\D/g, "");
-          return (
-            (uClean.length >= 10 && cleanTarget.endsWith(uClean.slice(-10))) ||
-            (cleanTarget.length >= 10 && uClean.endsWith(cleanTarget.slice(-10)))
-          );
-        });
+        try {
+          const cleanTarget = phone.replace(/\D/g, "");
+          const allUsers = await neonDb.select().from(schema.users);
+          const user = allUsers.find((u) => {
+            const uClean = u.phone.replace(/\D/g, "");
+            return (
+              (uClean.length >= 10 && cleanTarget.endsWith(uClean.slice(-10))) ||
+              (cleanTarget.length >= 10 && uClean.endsWith(cleanTarget.slice(-10)))
+            );
+          });
 
-        if (!user) {
-          return { success: false };
-        }
+          if (!user) {
+            return { success: false };
+          }
 
-        if (channel === "sms") {
-          await db.updateNotificationPreferences(user.user_id, { sms_enabled: false });
-        } else if (channel === "whatsapp") {
-          await db.updateNotificationPreferences(user.user_id, { whatsapp_enabled: false });
+          if (channel === "sms") {
+            await db.updateNotificationPreferences(user.user_id, { sms_enabled: false });
+          } else if (channel === "whatsapp") {
+            await db.updateNotificationPreferences(user.user_id, { whatsapp_enabled: false });
+          }
+          return { success: true, userId: user.user_id };
+        } catch (err) {
+          console.error("Neon unsubscribeChannelByPhone failed, falling back to localDb:", err);
         }
-        return { success: true, userId: user.user_id };
       }
     }
     return localDb.unsubscribeChannelByPhone(phone, channel);
@@ -3055,34 +3073,40 @@ export const db = {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
       if (neonDb) {
-        const cleanTarget = phone.replace(/\D/g, "");
-        const allUsers = await neonDb.select().from(schema.users);
-        const user = allUsers.find((u) => {
-          const uClean = u.phone.replace(/\D/g, "");
-          return (
-            (uClean.length >= 10 && cleanTarget.endsWith(uClean.slice(-10))) ||
-            (cleanTarget.length >= 10 && uClean.endsWith(cleanTarget.slice(-10)))
-          );
-        });
-
-        if (!user) {
-          return { success: false };
-        }
-
-        if (channel === "sms") {
-          await db.updateNotificationPreferences(user.user_id, {
-            sms_enabled: true,
-            sms_consent: true,
-            unsubscribed_all: false,
+        try {
+          const cleanTarget = phone.replace(/\D/g, "");
+          const allUsers = await neonDb.select().from(schema.users);
+          const user = allUsers.find((u) => {
+            const uClean = u.phone.replace(/\D/g, "");
+            return (
+              (uClean.length >= 10 && cleanTarget.endsWith(uClean.slice(-10))) ||
+              (cleanTarget.length >= 10 && uClean.endsWith(cleanTarget.slice(-10)))
+            );
           });
-        } else if (channel === "whatsapp") {
-          await db.updateNotificationPreferences(user.user_id, {
-            whatsapp_enabled: true,
-            whatsapp_consent: true,
-            unsubscribed_all: false,
-          });
+
+          if (!user) {
+            return { success: false };
+          }
+
+          if (channel === "sms") {
+            await db.updateNotificationPreferences(user.user_id, {
+              sms_enabled: true,
+              sms_consent: true,
+              consent_timestamp: new Date().toISOString(),
+              unsubscribed_all: false,
+            });
+          } else if (channel === "whatsapp") {
+            await db.updateNotificationPreferences(user.user_id, {
+              whatsapp_enabled: true,
+              whatsapp_consent: true,
+              consent_timestamp: new Date().toISOString(),
+              unsubscribed_all: false,
+            });
+          }
+          return { success: true, userId: user.user_id };
+        } catch (err) {
+          console.error("Neon resubscribeChannelByPhone failed, falling back to localDb:", err);
         }
-        return { success: true, userId: user.user_id };
       }
     }
     return localDb.resubscribeChannelByPhone(phone, channel);
