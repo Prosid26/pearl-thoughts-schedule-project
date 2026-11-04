@@ -1087,9 +1087,12 @@ class LocalDatabase {
     }
 
     const resolvedIsWave = isWave !== undefined ? isWave : doctor.scheduling_mode === "wave";
-    const resolvedWaveCapacity = resolvedIsWave
-      ? (waveCapacity && waveCapacity > 0 ? waveCapacity : doctor.wave_capacity || 3)
-      : 1;
+    const resolvedWaveCapacity =
+      waveCapacity && waveCapacity > 0
+        ? waveCapacity
+        : resolvedIsWave
+        ? doctor.wave_capacity || 3
+        : 1;
 
     this.state.counters.availabilityId += 1;
     const newSlot: Availability = {
@@ -1108,6 +1111,77 @@ class LocalDatabase {
     this.state.availability.push(newSlot);
     this.commit();
     return newSlot;
+  }
+
+  public addAvailabilityBatch(params: {
+    doctorId: number;
+    slots: Array<{
+      available_date: string;
+      start_time: string;
+      end_time: string;
+      slot_duration: number;
+      is_wave?: boolean;
+      wave_capacity?: number;
+    }>;
+  }): { addedCount: number; skippedCount: number; slots: Availability[] } {
+    const doctor = this.getDoctorById(params.doctorId);
+    if (!doctor) throw new Error("Doctor does not exist.");
+
+    const addedSlots: Availability[] = [];
+    let skippedCount = 0;
+
+    for (const item of params.slots) {
+      if (isSlotInPast(item.available_date, item.start_time)) {
+        skippedCount++;
+        continue;
+      }
+
+      // Conflict protection using unique doctor_date_slot index logic
+      const exists = this.state.availability.some(
+        (a) =>
+          a.doctor_id === params.doctorId &&
+          a.available_date === item.available_date &&
+          a.start_time === item.start_time
+      );
+
+      if (exists) {
+        skippedCount++;
+        continue;
+      }
+
+      const isWave = item.is_wave !== undefined ? item.is_wave : doctor.scheduling_mode === "wave";
+      const defaultCap = isWave ? (doctor.wave_capacity || 3) : 1;
+      const resolvedCapacity =
+        item.wave_capacity && item.wave_capacity > 0 ? item.wave_capacity : defaultCap;
+
+      this.state.counters.availabilityId += 1;
+      const newSlot: Availability = {
+        availability_id: this.state.counters.availabilityId,
+        doctor_id: params.doctorId,
+        available_date: item.available_date,
+        start_time: item.start_time,
+        end_time: item.end_time,
+        slot_duration: item.slot_duration,
+        is_available: true,
+        is_wave: isWave,
+        wave_capacity: resolvedCapacity,
+        wave_booked_count: 0,
+        created_at: new Date().toISOString(),
+      };
+
+      this.state.availability.push(newSlot);
+      addedSlots.push(newSlot);
+    }
+
+    if (addedSlots.length > 0) {
+      this.commit();
+    }
+
+    return {
+      addedCount: addedSlots.length,
+      skippedCount,
+      slots: addedSlots,
+    };
   }
 
   public deleteAvailabilitySlot(
@@ -1198,27 +1272,18 @@ class LocalDatabase {
         slot.is_available = false;
       }
     } else {
-      if (!slot.is_available) {
+      const capacity = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : 1;
+      const currentBooked = slot.wave_booked_count || 0;
+      if (currentBooked >= capacity || !slot.is_available) {
         throw new Error(
           "This time slot has already been booked by another patient. Please choose an alternative slot."
         );
       }
 
-      // Check if this slot already has an appointment assigned
-      const duplicateBooking = this.state.appointments.find(
-        (a) =>
-          a.availability_id === availabilityId &&
-          a.status !== "cancelled" &&
-          a.status !== "rejected"
-      );
-      if (duplicateBooking) {
-        throw new Error(
-          "This time slot is no longer available. Please select another slot."
-        );
+      slot.wave_booked_count = currentBooked + 1;
+      if (slot.wave_booked_count >= capacity) {
+        slot.is_available = false;
       }
-
-      // Mark slot unavailable
-      slot.is_available = false;
     }
 
     // Create appointment
@@ -1311,7 +1376,9 @@ class LocalDatabase {
         throw new Error("The selected wave arrival window is already at full capacity. Please choose another window.");
       }
     } else {
-      if (!newSlot.is_available) {
+      const cap = newSlot.wave_capacity && newSlot.wave_capacity > 0 ? newSlot.wave_capacity : 1;
+      const booked = newSlot.wave_booked_count || 0;
+      if (booked >= cap || !newSlot.is_available) {
         throw new Error("The requested alternative time slot has already been reserved. Please select another slot.");
       }
     }
@@ -1319,32 +1386,27 @@ class LocalDatabase {
     // Release old slot
     const oldSlot = this.getAvailabilityById(app.availability_id);
     if (oldSlot) {
-      if (oldSlot.is_wave) {
-        oldSlot.wave_booked_count = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
-        oldSlot.is_available = true;
-      } else {
-        oldSlot.is_available = true;
-      }
+      oldSlot.wave_booked_count = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
+      oldSlot.is_available = true;
     }
 
     // Claim new slot
     let waveNum: number | null = null;
     let estConsult: string | null = null;
 
+    const newCap = newSlot.wave_capacity || (newSlot.is_wave ? 3 : 1);
+    newSlot.wave_booked_count = (newSlot.wave_booked_count || 0) + 1;
+
     if (newSlot.is_wave) {
-      const cap = newSlot.wave_capacity || 3;
-      newSlot.wave_booked_count = (newSlot.wave_booked_count || 0) + 1;
       waveNum = newSlot.wave_booked_count;
       const [sh, sm] = newSlot.start_time.split(":").map(Number);
       const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
       const eh = Math.floor(totalMinutes / 60) % 24;
       const em = totalMinutes % 60;
       estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+    }
 
-      if (newSlot.wave_booked_count >= cap) {
-        newSlot.is_available = false;
-      }
-    } else {
+    if (newSlot.wave_booked_count >= newCap) {
       newSlot.is_available = false;
     }
 
@@ -1422,12 +1484,8 @@ class LocalDatabase {
     ) {
       const slot = this.getAvailabilityById(app.availability_id);
       if (slot) {
-        if (slot.is_wave) {
-          slot.wave_booked_count = Math.max(0, (slot.wave_booked_count || 1) - 1);
-          slot.is_available = true;
-        } else {
-          slot.is_available = true;
-        }
+        slot.wave_booked_count = Math.max(0, (slot.wave_booked_count || 1) - 1);
+        slot.is_available = true;
       }
     }
 

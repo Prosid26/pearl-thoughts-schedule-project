@@ -105,6 +105,54 @@ export const addAvailabilitySchema = z.object({
   path: ["end_time"],
 });
 
+export const createDoctorScheduleSchema = z
+  .object({
+    schedule_type: z.enum(["specific_dates", "recurring_weekly"]),
+    scheduling_mode: z.enum(["stream", "wave"]).default("stream"),
+    specific_dates: z
+      .union([
+        z.string(),
+        z.array(z.string()),
+      ])
+      .optional(),
+    weekdays: z
+      .union([
+        z.string(),
+        z.array(z.coerce.number()),
+      ])
+      .optional(),
+    start_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Start date must follow YYYY-MM-DD")
+      .optional(),
+    end_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "End date must follow YYYY-MM-DD")
+      .optional(),
+    start_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Start time must follow HH:mm format"),
+    end_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "End time must follow HH:mm format"),
+    slot_duration: z.coerce
+      .number()
+      .int()
+      .min(5, "Minimum duration is 5 minutes")
+      .max(240, "Maximum duration is 240 minutes")
+      .default(30),
+    capacity: z.coerce
+      .number()
+      .int()
+      .min(1, "Capacity must be at least 1")
+      .max(10, "Capacity cannot exceed 10")
+      .default(1),
+  })
+  .refine((data) => data.start_time < data.end_time, {
+    message: "End time must be after the start time",
+    path: ["end_time"],
+  });
+
 export const updateAppointmentStatusSchema = z.object({
   appointment_id: z.coerce.number().int().positive(),
   status: z.enum(["pending", "confirmed", "cancelled", "rejected", "completed"]),

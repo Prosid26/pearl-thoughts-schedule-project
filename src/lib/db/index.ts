@@ -1,7 +1,7 @@
 import { localDb } from "./local-store";
 import { isNeonConfigured, getNeonDb } from "./neon";
 import * as schema from "./schema";
-import { eq, and, or, gt, gte, desc, asc, sql } from "drizzle-orm";
+import { eq, and, or, gt, gte, desc, asc, sql, inArray } from "drizzle-orm";
 import { isSlotInPast, getTodayIST } from "@/lib/utils/date";
 import {
   generateDoctorSlotsForDate,
@@ -721,9 +721,12 @@ export const db = {
       if (neonDb) {
         const doctor = await db.getDoctorById(doctorId);
         const resolvedIsWave = isWave !== undefined ? isWave : doctor?.scheduling_mode === "wave";
-        const resolvedWaveCapacity = resolvedIsWave
-          ? (waveCapacity && waveCapacity > 0 ? waveCapacity : doctor?.wave_capacity || 3)
-          : 1;
+        const resolvedWaveCapacity =
+          waveCapacity && waveCapacity > 0
+            ? waveCapacity
+            : resolvedIsWave
+            ? doctor?.wave_capacity || 3
+            : 1;
 
         const result = await neonDb
           .insert(schema.availability)
@@ -755,6 +758,104 @@ export const db = {
       isWave,
       waveCapacity
     );
+  },
+
+  addAvailabilityBatch: async (params: {
+    doctorId: number;
+    slots: Array<{
+      available_date: string;
+      start_time: string;
+      end_time: string;
+      slot_duration: number;
+      is_wave?: boolean;
+      wave_capacity?: number;
+    }>;
+  }): Promise<{ addedCount: number; skippedCount: number; slots: Availability[] }> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        const doctor = await db.getDoctorById(params.doctorId);
+        if (!doctor) throw new Error("Doctor does not exist.");
+
+        if (params.slots.length === 0) {
+          return { addedCount: 0, skippedCount: 0, slots: [] };
+        }
+
+        const targetDates = Array.from(new Set(params.slots.map((s) => s.available_date)));
+
+        const existingRows = await neonDb
+          .select({
+            available_date: schema.availability.available_date,
+            start_time: schema.availability.start_time,
+          })
+          .from(schema.availability)
+          .where(
+            and(
+              eq(schema.availability.doctor_id, params.doctorId),
+              inArray(schema.availability.available_date, targetDates)
+            )
+          );
+
+        const existingSet = new Set(
+          existingRows.map((r) => `${r.available_date}_${r.start_time}`)
+        );
+
+        const toInsert: Array<typeof schema.availability.$inferInsert> = [];
+        let skippedCount = 0;
+
+        for (const s of params.slots) {
+          if (isSlotInPast(s.available_date, s.start_time)) {
+            skippedCount++;
+            continue;
+          }
+
+          const key = `${s.available_date}_${s.start_time}`;
+          if (existingSet.has(key)) {
+            skippedCount++;
+            continue;
+          }
+
+          const isWave = s.is_wave !== undefined ? s.is_wave : doctor.scheduling_mode === "wave";
+          const defaultCap = isWave ? (doctor.wave_capacity || 3) : 1;
+          const resolvedCapacity =
+            s.wave_capacity && s.wave_capacity > 0 ? s.wave_capacity : defaultCap;
+
+          toInsert.push({
+            doctor_id: params.doctorId,
+            available_date: s.available_date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            slot_duration: s.slot_duration,
+            is_available: true,
+            is_wave: isWave,
+            wave_capacity: resolvedCapacity,
+            wave_booked_count: 0,
+          });
+
+          existingSet.add(key);
+        }
+
+        let insertedSlots: Availability[] = [];
+        if (toInsert.length > 0) {
+          const inserted = await neonDb
+            .insert(schema.availability)
+            .values(toInsert)
+            .returning();
+
+          insertedSlots = inserted.map((r) => ({
+            ...r,
+            created_at: r.created_at.toISOString(),
+          }));
+        }
+
+        return {
+          addedCount: insertedSlots.length,
+          skippedCount,
+          slots: insertedSlots,
+        };
+      }
+    }
+    return localDb.addAvailabilityBatch(params);
   },
 
   deleteAvailabilitySlot: async (
@@ -833,16 +934,21 @@ export const db = {
             })
             .where(eq(schema.availability.availability_id, params.availabilityId));
         } else {
-          if (!slot.is_available) {
+          const cap = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : 1;
+          const currentBooked = slot.wave_booked_count || 0;
+          if (currentBooked >= cap || !slot.is_available) {
             throw new Error(
               "This time slot has already been booked by another patient. Please choose an alternative slot."
             );
           }
+          const nextCount = currentBooked + 1;
 
-          // Atomically mark slot unavailable
           await neonDb
             .update(schema.availability)
-            .set({ is_available: false })
+            .set({
+              wave_booked_count: nextCount,
+              ...(nextCount >= cap ? { is_available: false } : {}),
+            })
             .where(
               and(
                 eq(schema.availability.availability_id, params.availabilityId),
@@ -918,54 +1024,40 @@ export const db = {
         // Release old slot
         const oldSlot = await db.getAvailabilityById(app.availability_id);
         if (oldSlot) {
-          if (oldSlot.is_wave) {
-            const nextOldBooked = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
-            await neonDb
-              .update(schema.availability)
-              .set({ wave_booked_count: nextOldBooked, is_available: true })
-              .where(eq(schema.availability.availability_id, oldSlot.availability_id));
-          } else {
-            await neonDb
-              .update(schema.availability)
-              .set({ is_available: true })
-              .where(eq(schema.availability.availability_id, oldSlot.availability_id));
-          }
+          const nextOldBooked = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
+          await neonDb
+            .update(schema.availability)
+            .set({ wave_booked_count: nextOldBooked, is_available: true })
+            .where(eq(schema.availability.availability_id, oldSlot.availability_id));
         }
 
         // Secure new slot
         let waveNum: number | null = null;
         let estConsult: string | null = null;
 
+        const cap = newSlot.wave_capacity || (newSlot.is_wave ? 3 : 1);
+        const currentNewBooked = newSlot.wave_booked_count || 0;
+        if (currentNewBooked >= cap || !newSlot.is_available) {
+          throw new Error(newSlot.is_wave ? "Wave window at full capacity." : "Requested time slot is already at full capacity.");
+        }
+        const nextCount = currentNewBooked + 1;
+
         if (newSlot.is_wave) {
-          const cap = newSlot.wave_capacity || 3;
-          const currentNewBooked = newSlot.wave_booked_count || 0;
-          if (currentNewBooked >= cap || !newSlot.is_available) {
-            throw new Error("Wave window at full capacity.");
-          }
-          const nextCount = currentNewBooked + 1;
           waveNum = nextCount;
           const [sh, sm] = newSlot.start_time.split(":").map(Number);
           const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
           const eh = Math.floor(totalMinutes / 60) % 24;
           const em = totalMinutes % 60;
           estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
-
-          await neonDb
-            .update(schema.availability)
-            .set({
-              wave_booked_count: nextCount,
-              ...(nextCount >= cap ? { is_available: false } : {}),
-            })
-            .where(eq(schema.availability.availability_id, newSlot.availability_id));
-        } else {
-          if (!newSlot.is_available) {
-            throw new Error("Requested time slot is already booked.");
-          }
-          await neonDb
-            .update(schema.availability)
-            .set({ is_available: false })
-            .where(eq(schema.availability.availability_id, newSlot.availability_id));
         }
+
+        await neonDb
+          .update(schema.availability)
+          .set({
+            wave_booked_count: nextCount,
+            ...(nextCount >= cap ? { is_available: false } : {}),
+          })
+          .where(eq(schema.availability.availability_id, newSlot.availability_id));
 
         const newDate = new Date(`${newSlot.available_date}T${newSlot.start_time}:00Z`);
         await neonDb
@@ -1027,18 +1119,11 @@ export const db = {
         if (params.newStatus === "cancelled" || params.newStatus === "rejected") {
           const slot = await db.getAvailabilityById(app.availability_id);
           if (slot) {
-            if (slot.is_wave) {
-              const nextBooked = Math.max(0, (slot.wave_booked_count || 1) - 1);
-              await neonDb
-                .update(schema.availability)
-                .set({ wave_booked_count: nextBooked, is_available: true })
-                .where(eq(schema.availability.availability_id, slot.availability_id));
-            } else {
-              await neonDb
-                .update(schema.availability)
-                .set({ is_available: true })
-                .where(eq(schema.availability.availability_id, slot.availability_id));
-            }
+            const nextBooked = Math.max(0, (slot.wave_booked_count || 1) - 1);
+            await neonDb
+              .update(schema.availability)
+              .set({ wave_booked_count: nextBooked, is_available: true })
+              .where(eq(schema.availability.availability_id, slot.availability_id));
           }
         }
 
