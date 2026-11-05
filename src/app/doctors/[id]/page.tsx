@@ -37,6 +37,14 @@ export default async function DoctorDetailPage({
 
   const doctorName = doctor.user?.full_name || `Dr. ${doctor.specialization}`;
 
+  // Fetch actual configured duration from available roster or doctor policy
+  const configuredDuration =
+    availabilities.length > 0 && availabilities[0].slot_duration
+      ? availabilities[0].slot_duration
+      : doctor.scheduling_mode === "wave"
+      ? doctor.wave_interval_minutes || 60
+      : 30;
+
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Breadcrumb Navigation */}
@@ -94,8 +102,10 @@ export default async function DoctorDetailPage({
                   Slot Duration
                 </div>
                 <div className="font-serif text-xl font-bold text-forest mt-0.5">
-                  30 Mins
-                  <span className="font-sans text-[11px] font-normal text-ink-muted"> / patient</span>
+                  {configuredDuration} Mins
+                  <span className="font-sans text-[11px] font-normal text-ink-muted">
+                    {doctor.scheduling_mode === "wave" ? " / cohort" : " / patient"}
+                  </span>
                 </div>
               </div>
             </div>

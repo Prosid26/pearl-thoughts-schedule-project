@@ -205,9 +205,10 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                   const isSelected = selectedSlotId === slot.availability_id;
                   const isAvailable = slot.is_available;
                   const isWave = slot.is_wave;
-                  const remainingSpots = isWave && slot.wave_capacity
-                    ? Math.max(0, slot.wave_capacity - (slot.wave_booked_count || 0))
-                    : null;
+                  const totalCap = slot.wave_capacity || (isWave ? 3 : 1);
+                  const bookedCount = slot.wave_booked_count || 0;
+                  const remainingSpots =
+                    totalCap > 1 ? Math.max(0, totalCap - bookedCount) : null;
 
                   return (
                     <button
@@ -230,13 +231,19 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                         <span>{slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        {isWave && (
+                        {isWave ? (
                           <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase font-bold ${
                             isSelected ? "bg-white/20 text-white" : "bg-sage/50 text-forest"
                           }`}>
                             Wave
                           </span>
-                        )}
+                        ) : slot.slot_duration ? (
+                          <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                            isSelected ? "text-white/80" : "text-ink-muted"
+                          }`}>
+                            {slot.slot_duration}m
+                          </span>
+                        ) : null}
                         <span
                           className={`text-[10px] ${
                             !isAvailable
@@ -246,7 +253,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                               : "text-forest font-semibold"
                           }`}
                         >
-                          {isWave && remainingSpots !== null
+                          {remainingSpots !== null
                             ? `${remainingSpots} spot${remainingSpots !== 1 ? "s" : ""} left`
                             : isAvailable
                             ? "Open"
@@ -306,7 +313,7 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
                       </span>
                     </div>
                     <span className="font-semibold text-forest">
-                      Slot: {selectedSlot.available_date} @ {selectedSlot.start_time.slice(0, 5)} IST
+                      Slot: {selectedSlot.available_date} @ {selectedSlot.start_time.slice(0, 5)} IST ({selectedSlot.slot_duration || 30} mins)
                     </span>
                   </div>
 
