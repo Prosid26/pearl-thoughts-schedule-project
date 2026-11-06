@@ -75,6 +75,7 @@ export const doctorProvisioningSchema = z.object({
 export const bookAppointmentSchema = z.object({
   doctor_id: z.coerce.number().int().positive("Invalid doctor ID"),
   availability_id: z.coerce.number().int().positive("Invalid slot ID"),
+  slot_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
   reason: z
     .string()
     .trim()
@@ -147,10 +148,73 @@ export const createDoctorScheduleSchema = z
       .min(1, "Capacity must be at least 1")
       .max(10, "Capacity cannot exceed 10")
       .default(1),
+    is_override: z.coerce.boolean().default(false),
   })
   .refine((data) => data.start_time < data.end_time, {
     message: "End time must be after the start time",
     path: ["end_time"],
+  });
+
+export const modifyDoctorAvailabilityWindowElasticSchema = z
+  .object({
+    availability_id: z.coerce.number().int().positive("Invalid availability window ID"),
+    new_start_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Start time must follow HH:mm format"),
+    new_end_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "End time must follow HH:mm format"),
+    slot_duration: z.coerce.number().int().min(5).max(240).optional(),
+    capacity: z.coerce.number().int().min(1).max(10).optional(),
+  })
+  .refine((data) => data.new_start_time < data.new_end_time, {
+    message: "End time must be after the start time",
+    path: ["new_end_time"],
+  });
+
+export const modifyDoctorScheduleElasticSchema = z
+  .object({
+    schedule_type: z.enum(["specific_dates", "recurring_weekly"]),
+    specific_dates: z.union([z.string(), z.array(z.string())]).optional(),
+    weekdays: z.union([z.string(), z.array(z.coerce.number())]).optional(),
+    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    new_start_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Start time must follow HH:mm format"),
+    new_end_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "End time must follow HH:mm format"),
+    slot_duration: z.coerce.number().int().min(5).max(240).optional(),
+    capacity: z.coerce.number().int().min(1).max(10).optional(),
+    is_wave: z.coerce.boolean().optional(),
+  })
+  .refine((data) => data.new_start_time < data.new_end_time, {
+    message: "End time must be after the start time",
+    path: ["new_end_time"],
+  });
+
+export const previewDoctorScheduleElasticSchema = z
+  .object({
+    availability_id: z.coerce.number().int().positive().optional(),
+    schedule_type: z.enum(["specific_dates", "recurring_weekly"]).optional(),
+    specific_dates: z.union([z.string(), z.array(z.string())]).optional(),
+    weekdays: z.union([z.string(), z.array(z.coerce.number())]).optional(),
+    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    new_start_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Start time must follow HH:mm format"),
+    new_end_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "End time must follow HH:mm format"),
+    slot_duration: z.coerce.number().int().min(5).max(240).optional(),
+    capacity: z.coerce.number().int().min(1).max(10).optional(),
+    is_wave: z.coerce.boolean().optional(),
+  })
+  .refine((data) => data.new_start_time < data.new_end_time, {
+    message: "End time must be after the start time",
+    path: ["new_end_time"],
   });
 
 export const updateAppointmentStatusSchema = z.object({
@@ -161,6 +225,7 @@ export const updateAppointmentStatusSchema = z.object({
 export const rescheduleAppointmentSchema = z.object({
   appointment_id: z.coerce.number().int().positive("Invalid appointment ID"),
   new_availability_id: z.coerce.number().int().positive("Please select an alternative time slot"),
+  new_slot_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
   reason: z.string().trim().max(300, "Reason cannot exceed 300 characters").optional(),
 });
 
@@ -218,4 +283,86 @@ export const earlyOfferActionSchema = z.object({
 
 export const completeConsultationSchema = z.object({
   appointment_id: z.coerce.number().int().positive("Invalid appointment ID"),
+});
+
+export const createReceptionistInvitationSchema = z.object({
+  clinic_id: z.coerce.number().int().positive("Please select a clinic"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .email("Please provide a valid email address"),
+});
+
+export const acceptReceptionistInvitationSchema = z.object({
+  token: z.string().trim().min(1, "Invitation token is required"),
+  full_name: z
+    .string()
+    .trim()
+    .min(2, "Full name must be at least 2 characters long")
+    .max(100, "Full name cannot exceed 100 characters"),
+  phone: z
+    .string()
+    .trim()
+    .min(8, "Phone number is too short")
+    .max(25, "Phone number is too long"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters long")
+    .regex(/[0-9]/, "Password must contain at least one number"),
+});
+
+export const updateReceptionistClinicSchema = z.object({
+  receptionist_id: z.coerce.number().int().positive("Invalid receptionist ID"),
+  clinic_id: z.coerce.number().int().positive("Invalid clinic ID"),
+});
+
+export const receptionistBookAppointmentSchema = z.object({
+  patient_id: z.coerce.number().int().positive("Please select or register a patient"),
+  doctor_id: z.coerce.number().int().positive("Please select a doctor"),
+  availability_id: z.coerce.number().int().positive("Please select an availability slot"),
+  slot_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Reason for visit is required (min 3 characters)")
+    .max(500, "Reason must not exceed 500 characters"),
+});
+
+export const receptionistRegisterPatientSchema = z.object({
+  full_name: z
+    .string()
+    .trim()
+    .min(2, "Full name must be at least 2 characters long")
+    .max(100, "Full name cannot exceed 100 characters"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .email("Please provide a valid email address"),
+  phone: z
+    .string()
+    .trim()
+    .min(8, "Phone number is too short")
+    .max(25, "Phone number is too long"),
+  date_of_birth: z.string().optional(),
+  gender: z
+    .enum(["Male", "Female", "Other", "Prefer not to say", ""])
+    .optional(),
+  address: z.string().max(300, "Address is too long").optional(),
+});
+
+export const blockDoctorDateSchema = z.object({
+  doctor_id: z.coerce.number().int().positive("Invalid doctor ID"),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must follow YYYY-MM-DD format"),
+  reason: z.string().trim().max(300, "Reason cannot exceed 300 characters").optional(),
+});
+
+export const unblockDoctorDateSchema = z.object({
+  doctor_id: z.coerce.number().int().positive("Invalid doctor ID"),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must follow YYYY-MM-DD format"),
 });
