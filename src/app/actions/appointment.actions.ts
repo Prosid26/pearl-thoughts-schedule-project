@@ -50,6 +50,7 @@ export async function bookAppointmentAction(
       doctor_id: formData.get("doctor_id"),
       availability_id: formData.get("availability_id"),
       reason: formData.get("reason"),
+      slot_time: formData.get("slot_time") || undefined,
     };
 
     const validated = bookAppointmentSchema.safeParse(rawData);
@@ -60,7 +61,7 @@ export async function bookAppointmentAction(
       };
     }
 
-    const { doctor_id, availability_id, reason } = validated.data;
+    const { doctor_id, availability_id, reason, slot_time } = validated.data;
 
     // Atomic server-side booking execution
     const appointment = await db.bookAppointmentAtomic({
@@ -68,6 +69,7 @@ export async function bookAppointmentAction(
       doctorId: doctor_id,
       availabilityId: availability_id,
       reason,
+      slotTime: slot_time,
     });
 
     // Send booking confirmation notifications (Patient + Doctor)
@@ -366,7 +368,8 @@ export async function cancelAppointmentAction(
 export async function rescheduleAppointmentAction(
   appointmentId: number,
   newAvailabilityId: number,
-  reason?: string
+  reason?: string,
+  newSlotTime?: string
 ): Promise<ActionResult<{ appointmentId: number }>> {
   try {
     const session = await requireUser();
@@ -374,6 +377,7 @@ export async function rescheduleAppointmentAction(
     const validated = rescheduleAppointmentSchema.safeParse({
       appointment_id: appointmentId,
       new_availability_id: newAvailabilityId,
+      new_slot_time: newSlotTime,
       reason,
     });
     if (!validated.success) {
@@ -393,6 +397,7 @@ export async function rescheduleAppointmentAction(
     const updated = await db.rescheduleAppointmentAtomic({
       appointmentId,
       newAvailabilityId,
+      newSlotTime: validated.data.new_slot_time,
       reason,
       requesterUserId: session.user_id,
       requesterRole: session.role,

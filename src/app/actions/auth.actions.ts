@@ -51,6 +51,8 @@ export async function signInAction(
 
     let patientId: number | null = null;
     let doctorId: number | null = null;
+    let receptionistId: number | null = null;
+    let clinicId: number | null = null;
 
     if (user.role === "patient") {
       const patient = await db.getPatientByUserId(user.user_id);
@@ -58,6 +60,11 @@ export async function signInAction(
     } else if (user.role === "doctor") {
       const doctor = await db.getDoctorByUserId(user.user_id);
       doctorId = doctor ? doctor.doctor_id : null;
+      clinicId = doctor ? doctor.clinic_id || null : null;
+    } else if (user.role === "receptionist") {
+      const receptionist = await db.getReceptionistByUserId(user.user_id);
+      receptionistId = receptionist ? receptionist.receptionist_id : null;
+      clinicId = receptionist ? receptionist.clinic_id : null;
     }
 
     await createSession({
@@ -67,6 +74,8 @@ export async function signInAction(
       role: user.role,
       patient_id: patientId,
       doctor_id: doctorId,
+      receptionist_id: receptionistId,
+      clinic_id: clinicId,
     });
 
     revalidatePath("/", "layout");

@@ -1,10 +1,18 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { isSlotInPast, getTodayIST } from "@/lib/utils/date";
 import {
   generateDoctorSlotsForDate,
   getRollingDateWindow,
 } from "@/lib/scheduling/doctor-schedule";
+import {
+  doIntervalsOverlap,
+  generateTimeSlots,
+  calculateStreamAppointmentTimes,
+  calculateElasticDiff,
+  resolveTargetDates,
+} from "@/lib/scheduling/slot-generator";
 import {
   User,
   Patient,
@@ -29,6 +37,10 @@ import {
   ScheduledReminder,
   PatientNotificationPreferences,
   InAppNotificationCategory,
+  Clinic,
+  Receptionist,
+  ReceptionistInvitation,
+  InvitationStatus,
 } from "@/types/database";
 
 interface DatabaseState {
@@ -37,6 +49,9 @@ interface DatabaseState {
   doctors: Doctor[];
   availability: Availability[];
   appointments: Appointment[];
+  clinics: Clinic[];
+  receptionists: Receptionist[];
+  receptionistInvitations: ReceptionistInvitation[];
   waitingQueue: WaitingQueueEntry[];
   earlySlotOffers: EarlySlotOffer[];
   notifications: InAppNotification[];
@@ -53,6 +68,9 @@ interface DatabaseState {
     doctorId: number;
     availabilityId: number;
     appointmentId: number;
+    clinicId: number;
+    receptionistId: number;
+    invitationId: number;
     queueId: number;
     offerId: number;
     notificationId: number;
@@ -183,6 +201,15 @@ function generateInitialSeed(): DatabaseState {
       role: "admin",
       created_at: new Date().toISOString(),
     },
+    {
+      user_id: 12,
+      full_name: "Pooja Kulkarni",
+      email: "receptionist@demo.com",
+      phone: "+91 98200 88776",
+      password_hash: DEFAULT_PASSWORD_HASH,
+      role: "receptionist",
+      created_at: new Date().toISOString(),
+    },
   ];
 
   const patients: Patient[] = [
@@ -208,6 +235,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 1,
       user_id: 3,
+      clinic_id: 1,
       specialization: "Cardiology",
       qualification: "MBBS, MD (Medicine), DM (Cardiology - AIIMS New Delhi)",
       experience_years: 14,
@@ -220,6 +248,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 2,
       user_id: 4,
+      clinic_id: 2,
       specialization: "Dermatology",
       qualification: "MBBS, MD (Dermatology, Venereology & Leprosy - Grant Medical College)",
       experience_years: 11,
@@ -232,6 +261,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 3,
       user_id: 5,
+      clinic_id: 3,
       specialization: "Neurology",
       qualification: "MBBS, MD (Medicine), DM (Neurology - NIMHANS Bengaluru)",
       experience_years: 16,
@@ -244,6 +274,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 4,
       user_id: 6,
+      clinic_id: 4,
       specialization: "Pediatrics",
       qualification: "MBBS, DCH, DNB (Pediatrics - Bai Jerbai Wadia Hospital for Children)",
       experience_years: 12,
@@ -256,6 +287,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 5,
       user_id: 7,
+      clinic_id: 1,
       specialization: "Orthopedics",
       qualification: "MBBS, MS (Orthopedics - KEM Hospital Mumbai), Fellowship in Joint Replacement",
       experience_years: 15,
@@ -268,6 +300,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 6,
       user_id: 8,
+      clinic_id: 1,
       specialization: "General Medicine",
       qualification: "MBBS, MD (General Medicine - B.J. Medical College Pune)",
       experience_years: 13,
@@ -280,6 +313,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 7,
       user_id: 9,
+      clinic_id: 2,
       specialization: "Gynecology",
       qualification: "MBBS, MS (Obstetrics & Gynecology - Seth GS Medical College & KEM)",
       experience_years: 10,
@@ -292,6 +326,7 @@ function generateInitialSeed(): DatabaseState {
     {
       doctor_id: 8,
       user_id: 10,
+      clinic_id: 3,
       specialization: "Dentistry",
       qualification: "BDS, MDS (Prosthodontics & Implantology - Nair Hospital Dental College)",
       experience_years: 9,
@@ -299,6 +334,46 @@ function generateInitialSeed(): DatabaseState {
       bio: "Dr. Karan Shah provides high-precision cosmetic dentistry, dental implants, pain-free root canals, and orthodontic smile designs.",
       avatar_url: null,
       clinic_address: "Shah Dental Studio & Laser Clinic, FC Road, Shivajinagar, Pune, Maharashtra",
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  const clinics: Clinic[] = [
+    {
+      clinic_id: 1,
+      name: "Apex Heart & Medical Center",
+      address: "Link Road, Andheri West, Mumbai, Maharashtra 400053",
+      phone: "+91 22 2630 1100",
+      created_at: new Date().toISOString(),
+    },
+    {
+      clinic_id: 2,
+      name: "Twacha Healthcare Clinic",
+      address: "Hill Road, Bandra West, Mumbai, Maharashtra 400050",
+      phone: "+91 22 2640 2200",
+      created_at: new Date().toISOString(),
+    },
+    {
+      clinic_id: 3,
+      name: "Mind & Nerve Healthcare Center",
+      address: "Central Avenue, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076",
+      phone: "+91 22 2570 3300",
+      created_at: new Date().toISOString(),
+    },
+    {
+      clinic_id: 4,
+      name: "Vatsalya Children's & Family Clinic",
+      address: "Gokhale Road, Dadar West, Mumbai, Maharashtra 400028",
+      phone: "+91 22 2430 4400",
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  const receptionists: Receptionist[] = [
+    {
+      receptionist_id: 1,
+      user_id: 12,
+      clinic_id: 1,
       created_at: new Date().toISOString(),
     },
   ];
@@ -575,6 +650,9 @@ function generateInitialSeed(): DatabaseState {
     doctors,
     availability,
     appointments,
+    clinics,
+    receptionists,
+    receptionistInvitations: [],
     waitingQueue,
     earlySlotOffers: [],
     notifications: [],
@@ -586,11 +664,14 @@ function generateInitialSeed(): DatabaseState {
     scheduledReminders: [],
     notificationPreferences: [],
     counters: {
-      userId: 11,
+      userId: 12,
       patientId: 2,
       doctorId: 8,
       availabilityId: 24,
       appointmentId: 1,
+      clinicId: 4,
+      receptionistId: 1,
+      invitationId: 0,
       queueId: 1,
       offerId: 0,
       notificationId: 0,
@@ -629,6 +710,50 @@ class LocalDatabase {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed.users && parsed.doctors && parsed.appointments) {
+          if (!parsed.clinics || parsed.clinics.length === 0) {
+            parsed.clinics = [
+              {
+                clinic_id: 1,
+                name: "Apex Heart & Medical Center",
+                address: "Link Road, Andheri West, Mumbai, Maharashtra 400053",
+                phone: "+91 22 2630 1100",
+                created_at: new Date().toISOString(),
+              },
+              {
+                clinic_id: 2,
+                name: "Twacha Healthcare Clinic",
+                address: "Hill Road, Bandra West, Mumbai, Maharashtra 400050",
+                phone: "+91 22 2640 2200",
+                created_at: new Date().toISOString(),
+              },
+              {
+                clinic_id: 3,
+                name: "Mind & Nerve Healthcare Center",
+                address: "Central Avenue, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076",
+                phone: "+91 22 2570 3300",
+                created_at: new Date().toISOString(),
+              },
+              {
+                clinic_id: 4,
+                name: "Vatsalya Children's & Family Clinic",
+                address: "Gokhale Road, Dadar West, Mumbai, Maharashtra 400028",
+                phone: "+91 22 2430 4400",
+                created_at: new Date().toISOString(),
+              },
+            ];
+          }
+          if (!parsed.receptionists) parsed.receptionists = [];
+          if (!parsed.receptionistInvitations) parsed.receptionistInvitations = [];
+
+          const defaultDocClinics: Record<number, number> = {
+            1: 1, 2: 2, 3: 3, 4: 4, 5: 1, 6: 1, 7: 2, 8: 3,
+          };
+          for (const d of parsed.doctors) {
+            if (!d.clinic_id) {
+              d.clinic_id = defaultDocClinics[d.doctor_id] || 1;
+            }
+          }
+
           if (!parsed.waitingQueue) parsed.waitingQueue = [];
           if (!parsed.earlySlotOffers) parsed.earlySlotOffers = [];
           if (!parsed.notifications) parsed.notifications = [];
@@ -640,6 +765,9 @@ class LocalDatabase {
           if (!parsed.scheduledReminders) parsed.scheduledReminders = [];
           if (!parsed.notificationPreferences) parsed.notificationPreferences = [];
           if (!parsed.counters) parsed.counters = {};
+          if (!parsed.counters.clinicId) parsed.counters.clinicId = parsed.clinics.length;
+          if (!parsed.counters.receptionistId) parsed.counters.receptionistId = parsed.receptionists.length;
+          if (!parsed.counters.invitationId) parsed.counters.invitationId = parsed.receptionistInvitations.length;
           if (!parsed.counters.queueId) parsed.counters.queueId = parsed.waitingQueue.length;
           if (!parsed.counters.offerId) parsed.counters.offerId = parsed.earlySlotOffers.length;
           if (!parsed.counters.notificationId) parsed.counters.notificationId = parsed.notifications.length;
@@ -649,6 +777,7 @@ class LocalDatabase {
           if (!parsed.counters.deliveryId) parsed.counters.deliveryId = parsed.notificationLogs.length;
           if (!parsed.counters.reminderId) parsed.counters.reminderId = parsed.scheduledReminders.length;
           if (!parsed.counters.preferenceId) parsed.counters.preferenceId = parsed.notificationPreferences.length;
+
           if (!parsed.users.some((u: User) => u.email === "admin@demo.com")) {
             parsed.users.push({
               user_id: 11,
@@ -661,6 +790,29 @@ class LocalDatabase {
             });
             if (parsed.counters.userId < 11) parsed.counters.userId = 11;
           }
+
+          if (!parsed.users.some((u: User) => u.email === "receptionist@demo.com")) {
+            parsed.users.push({
+              user_id: 12,
+              full_name: "Pooja Kulkarni",
+              email: "receptionist@demo.com",
+              phone: "+91 98200 88776",
+              password_hash: DEFAULT_PASSWORD_HASH,
+              role: "receptionist",
+              created_at: new Date().toISOString(),
+            });
+            if (parsed.counters.userId < 12) parsed.counters.userId = 12;
+            if (!parsed.receptionists.some((r: Receptionist) => r.user_id === 12)) {
+              parsed.receptionists.push({
+                receptionist_id: 1,
+                user_id: 12,
+                clinic_id: 1,
+                created_at: new Date().toISOString(),
+              });
+              if (parsed.counters.receptionistId < 1) parsed.counters.receptionistId = 1;
+            }
+          }
+
           return parsed;
         }
       }
@@ -763,6 +915,27 @@ class LocalDatabase {
     };
   }
 
+  public getPatients(searchQuery?: string): Patient[] {
+    return this.state.patients
+      .map((p) => {
+        const user = this.getUserById(p.user_id);
+        return {
+          ...p,
+          user: user
+            ? { full_name: user.full_name, email: user.email, phone: user.phone }
+            : undefined,
+        };
+      })
+      .filter((p) => {
+        if (!searchQuery || !searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase().trim();
+        const name = p.user?.full_name?.toLowerCase() || "";
+        const phone = p.user?.phone?.toLowerCase() || "";
+        const email = p.user?.email?.toLowerCase() || "";
+        return name.includes(q) || phone.includes(q) || email.includes(q);
+      });
+  }
+
   public createPatient(
     userId: number,
     dob?: string,
@@ -821,11 +994,13 @@ class LocalDatabase {
     const doctor = this.state.doctors.find((d) => d.user_id === userId);
     if (!doctor) return undefined;
     const user = this.getUserById(userId);
+    const clinic = doctor.clinic_id ? this.getClinicById(doctor.clinic_id) : undefined;
     return {
       ...doctor,
       user: user
         ? { full_name: user.full_name, email: user.email, phone: user.phone }
         : undefined,
+      clinic,
     };
   }
 
@@ -833,11 +1008,13 @@ class LocalDatabase {
     const doctor = this.state.doctors.find((d) => d.doctor_id === doctorId);
     if (!doctor) return undefined;
     const user = this.getUserById(doctor.user_id);
+    const clinic = doctor.clinic_id ? this.getClinicById(doctor.clinic_id) : undefined;
     return {
       ...doctor,
       user: user
         ? { full_name: user.full_name, email: user.email, phone: user.phone }
         : undefined,
+      clinic,
     };
   }
 
@@ -845,10 +1022,12 @@ class LocalDatabase {
     search?: string;
     specialization?: string;
     minExperience?: number;
+    clinicId?: number;
   }): Doctor[] {
     return this.state.doctors
       .map((d) => {
         const user = this.getUserById(d.user_id);
+        const clinic = d.clinic_id ? this.getClinicById(d.clinic_id) : undefined;
         return {
           ...d,
           user: user
@@ -858,9 +1037,13 @@ class LocalDatabase {
                 phone: user.phone,
               }
             : undefined,
+          clinic,
         };
       })
       .filter((d) => {
+        if (filters?.clinicId && d.clinic_id !== filters.clinicId) {
+          return false;
+        }
         if (filters?.specialization && filters.specialization !== "All") {
           if (
             d.specialization.toLowerCase() !==
@@ -891,12 +1074,14 @@ class LocalDatabase {
     consultationFee: number,
     bio?: string,
     avatarUrl?: string,
-    clinicAddress?: string
+    clinicAddress?: string,
+    clinicId?: number
   ): Doctor {
     this.state.counters.doctorId += 1;
     const doctor: Doctor = {
       doctor_id: this.state.counters.doctorId,
       user_id: userId,
+      clinic_id: clinicId || null,
       specialization,
       qualification,
       experience_years: experienceYears,
@@ -921,6 +1106,7 @@ class LocalDatabase {
       consultation_fee?: number;
       bio?: string;
       clinic_address?: string;
+      clinic_id?: number;
       scheduling_mode?: "stream" | "wave";
       wave_capacity?: number;
       wave_interval_minutes?: number;
@@ -943,6 +1129,8 @@ class LocalDatabase {
     if (data.bio !== undefined) doctor.bio = data.bio;
     if (data.clinic_address !== undefined)
       doctor.clinic_address = data.clinic_address;
+    if (data.clinic_id !== undefined)
+      doctor.clinic_id = data.clinic_id;
     if (data.scheduling_mode !== undefined)
       doctor.scheduling_mode = data.scheduling_mode;
     if (data.wave_capacity !== undefined)
@@ -961,6 +1149,328 @@ class LocalDatabase {
     return this.getDoctorById(doctorId)!;
   }
 
+  // --- Clinic operations ---
+  public getClinics(): Clinic[] {
+    return [...this.state.clinics];
+  }
+
+  public getClinicById(clinicId: number): Clinic | undefined {
+    return this.state.clinics.find((c) => c.clinic_id === clinicId);
+  }
+
+  public getDoctorsByClinic(clinicId: number): Doctor[] {
+    return this.getDoctors({ clinicId });
+  }
+
+  // --- Receptionist operations ---
+  public getReceptionists(): Receptionist[] {
+    return this.state.receptionists.map((r) => this.hydrateReceptionist(r));
+  }
+
+  public getReceptionistById(receptionistId: number): Receptionist | undefined {
+    const rec = this.state.receptionists.find((r) => r.receptionist_id === receptionistId);
+    if (!rec) return undefined;
+    return this.hydrateReceptionist(rec);
+  }
+
+  public getReceptionistByUserId(userId: number): Receptionist | undefined {
+    const rec = this.state.receptionists.find((r) => r.user_id === userId);
+    if (!rec) return undefined;
+    return this.hydrateReceptionist(rec);
+  }
+
+  public createReceptionist(userId: number, clinicId: number): Receptionist {
+    const existing = this.state.receptionists.find((r) => r.user_id === userId);
+    if (existing) {
+      existing.clinic_id = clinicId;
+      this.commit();
+      return this.hydrateReceptionist(existing);
+    }
+    this.state.counters.receptionistId += 1;
+    const newRec: Receptionist = {
+      receptionist_id: this.state.counters.receptionistId,
+      user_id: userId,
+      clinic_id: clinicId,
+      created_at: new Date().toISOString(),
+    };
+    this.state.receptionists.push(newRec);
+    this.commit();
+    return this.hydrateReceptionist(newRec);
+  }
+
+  public updateReceptionistClinic(receptionistId: number, clinicId: number): Receptionist {
+    const rec = this.state.receptionists.find((r) => r.receptionist_id === receptionistId);
+    if (!rec) throw new Error("Receptionist not found.");
+    const clinic = this.getClinicById(clinicId);
+    if (!clinic) throw new Error("Target clinic does not exist.");
+    rec.clinic_id = clinicId;
+    this.commit();
+    return this.hydrateReceptionist(rec);
+  }
+
+  public getAppointmentsByClinic(clinicId: number): Appointment[] {
+    const clinicDoctorIds = new Set(
+      this.state.doctors.filter((d) => d.clinic_id === clinicId).map((d) => d.doctor_id)
+    );
+    return this.state.appointments
+      .filter((a) => clinicDoctorIds.has(a.doctor_id))
+      .map((a) => this.hydrateAppointment(a))
+      .sort(
+        (a, b) =>
+          new Date(b.appointment_date).getTime() -
+          new Date(a.appointment_date).getTime()
+      );
+  }
+
+  private hydrateReceptionist(rec: Receptionist): Receptionist {
+    const user = this.getUserById(rec.user_id);
+    const clinic = this.getClinicById(rec.clinic_id);
+    return {
+      ...rec,
+      user: user ? { full_name: user.full_name, email: user.email, phone: user.phone } : undefined,
+      clinic,
+    };
+  }
+
+  // --- Receptionist Invitation operations ---
+  public createReceptionistInvitation(params: {
+    clinicId: number;
+    email: string;
+    invitedByUserId: number;
+  }): { invitation: ReceptionistInvitation; rawToken: string } {
+    const clinic = this.getClinicById(params.clinicId);
+    if (!clinic) throw new Error("Clinic does not exist.");
+    const email = params.email.toLowerCase().trim();
+
+    // Generate cryptographically secure random token (64 hex characters)
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48 hours validity
+
+    this.state.counters.invitationId += 1;
+    const inv: ReceptionistInvitation = {
+      invitation_id: this.state.counters.invitationId,
+      clinic_id: params.clinicId,
+      email,
+      token_hash: tokenHash,
+      status: "pending",
+      expires_at: expiresAt,
+      created_by_user_id: params.invitedByUserId,
+      created_at: new Date().toISOString(),
+    };
+    this.state.receptionistInvitations.push(inv);
+    this.commit();
+
+    return {
+      invitation: { ...inv, clinic },
+      rawToken,
+    };
+  }
+
+  public getReceptionistInvitations(clinicId?: number): ReceptionistInvitation[] {
+    const now = new Date().toISOString();
+    return this.state.receptionistInvitations
+      .filter((inv) => {
+        if (clinicId && inv.clinic_id !== clinicId) return false;
+        return true;
+      })
+      .map((inv) => {
+        // Auto-mark expired if past expires_at and still pending
+        if (inv.status === "pending" && inv.expires_at < now) {
+          inv.status = "expired";
+        }
+        return {
+          ...inv,
+          clinic: this.getClinicById(inv.clinic_id),
+        };
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || "").getTime() -
+          new Date(a.created_at || "").getTime()
+      );
+  }
+
+  public getReceptionistInvitationByToken(rawToken: string): ReceptionistInvitation | undefined {
+    const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
+    const inv = this.state.receptionistInvitations.find((i) => i.token_hash === tokenHash);
+    if (!inv) return undefined;
+
+    const now = new Date().toISOString();
+    if (inv.status === "pending" && inv.expires_at < now) {
+      inv.status = "expired";
+      this.commit();
+      return undefined;
+    }
+
+    if (inv.status !== "pending") {
+      return undefined;
+    }
+
+    return {
+      ...inv,
+      clinic: this.getClinicById(inv.clinic_id),
+    };
+  }
+
+  public revokeReceptionistInvitation(invitationId: number): ReceptionistInvitation {
+    const inv = this.state.receptionistInvitations.find((i) => i.invitation_id === invitationId);
+    if (!inv) throw new Error("Invitation not found.");
+    if (inv.status !== "pending") {
+      throw new Error(`Cannot revoke invitation with status '${inv.status}'.`);
+    }
+    inv.status = "revoked";
+    this.commit();
+    return {
+      ...inv,
+      clinic: this.getClinicById(inv.clinic_id),
+    };
+  }
+
+  public acceptReceptionistInvitation(params: {
+    rawToken: string;
+    fullName: string;
+    phone: string;
+    passwordHash: string;
+  }): { user: User; receptionist: Receptionist } {
+    const invitation = this.getReceptionistInvitationByToken(params.rawToken);
+    if (!invitation) {
+      throw new Error("Invalid, expired, or already used invitation token.");
+    }
+
+    let user = this.getUserByEmail(invitation.email);
+    if (!user) {
+      user = this.createUser(
+        params.fullName,
+        invitation.email,
+        params.phone,
+        params.passwordHash,
+        "receptionist"
+      );
+    } else {
+      user.role = "receptionist";
+      user.full_name = params.fullName.trim();
+      user.phone = params.phone.trim();
+      user.password_hash = params.passwordHash;
+    }
+
+    const receptionist = this.createReceptionist(user.user_id, invitation.clinic_id);
+
+    // Mark invitation accepted
+    const storedInv = this.state.receptionistInvitations.find((i) => i.invitation_id === invitation.invitation_id);
+    if (storedInv) {
+      storedInv.status = "accepted";
+      storedInv.accepted_at = new Date().toISOString();
+    }
+    this.commit();
+
+    return { user, receptionist };
+  }
+
+  // --- Doctor Schedule Blocking ---
+  public blockDoctorDate(params: {
+    doctorId: number;
+    date: string;
+    reason?: string;
+  }): { blockedSlots: Availability[]; createdOverride: boolean } {
+    const { doctorId, date, reason } = params;
+    const doctor = this.getDoctorById(doctorId);
+    if (!doctor) throw new Error("Doctor not found.");
+
+    // Check if active appointments exist on this date
+    const activeAppointments = this.state.appointments.filter(
+      (a) =>
+        a.doctor_id === doctorId &&
+        a.status !== "cancelled" &&
+        a.status !== "rejected" &&
+        typeof a.appointment_date === "string" &&
+        a.appointment_date.startsWith(date)
+    );
+
+    if (activeAppointments.length > 0) {
+      throw new Error(
+        `Cannot block ${date}: There are ${activeAppointments.length} active booked appointment(s). Please reschedule or cancel them first.`
+      );
+    }
+
+    // Mark any existing slots on that date as blocked
+    const existingSlots = this.state.availability.filter(
+      (a) => a.doctor_id === doctorId && a.available_date === date
+    );
+
+    let createdOverride = false;
+    const blockReasonText = reason?.trim() || "Doctor unavailable / Leave";
+
+    if (existingSlots.length > 0) {
+      for (const slot of existingSlots) {
+        slot.is_blocked = true;
+        slot.is_available = false;
+        slot.block_reason = blockReasonText;
+      }
+    } else {
+      // Create a blocked window for the day
+      this.state.counters.availabilityId += 1;
+      const placeholder: Availability = {
+        availability_id: this.state.counters.availabilityId,
+        doctor_id: doctorId,
+        available_date: date,
+        start_time: "09:00",
+        end_time: "17:00",
+        slot_duration: 30,
+        is_available: false,
+        is_wave: false,
+        wave_capacity: 0,
+        wave_booked_count: 0,
+        is_blocked: true,
+        block_reason: blockReasonText,
+        parent_availability_id: null,
+        created_at: new Date().toISOString(),
+      };
+      this.state.availability.push(placeholder);
+      existingSlots.push(placeholder);
+      createdOverride = true;
+    }
+
+    this.commit();
+    return {
+      blockedSlots: existingSlots,
+      createdOverride,
+    };
+  }
+
+  public unblockDoctorDate(params: {
+    doctorId: number;
+    date: string;
+  }): { unblockedSlots: Availability[] } {
+    const { doctorId, date } = params;
+    const slots = this.state.availability.filter(
+      (a) => a.doctor_id === doctorId && a.available_date === date && a.is_blocked
+    );
+
+    if (slots.length === 0) {
+      return { unblockedSlots: [] };
+    }
+
+    const unblocked: Availability[] = [];
+    this.state.availability = this.state.availability.filter((a) => {
+      if (a.doctor_id === doctorId && a.available_date === date && a.is_blocked) {
+        if (a.wave_capacity === 0 && a.start_time === "09:00" && a.end_time === "17:00") {
+          return false; // remove placeholder
+        }
+        a.is_blocked = false;
+        a.block_reason = null;
+        a.is_available = true;
+        unblocked.push(a);
+        return true;
+      }
+      return true;
+    });
+
+    this.commit();
+    return { unblockedSlots: unblocked };
+  }
+
   // --- Availability operations ---
   public ensureDoctorAvailabilityWindow(
     doctorId: number,
@@ -973,6 +1483,14 @@ class LocalDatabase {
     let addedCount = 0;
 
     for (const dateStr of dates) {
+      // Do not pollute dates that already have any availability configured
+      const hasAvailability = this.state.availability.some(
+        (a) => a.doctor_id === doctorId && a.available_date === dateStr
+      );
+      if (hasAvailability) {
+        continue;
+      }
+
       const candidateSlots = generateDoctorSlotsForDate(
         doctorId,
         dateStr,
@@ -981,39 +1499,22 @@ class LocalDatabase {
       );
 
       for (const slotDef of candidateSlots) {
-        const existing = this.state.availability.find(
-          (a) =>
-            a.doctor_id === doctorId &&
-            a.available_date === dateStr &&
-            a.start_time === slotDef.startTime
-        );
-
-        if (!existing) {
-          this.state.counters.availabilityId += 1;
-          this.state.availability.push({
-            availability_id: this.state.counters.availabilityId,
-            doctor_id: doctorId,
-            available_date: dateStr,
-            start_time: slotDef.startTime,
-            end_time: slotDef.endTime,
-            slot_duration: slotDef.slotDuration,
-            is_available: true,
-            is_wave: slotDef.isWave,
-            wave_capacity: slotDef.waveCapacity,
-            wave_booked_count: 0,
-            created_at: new Date().toISOString(),
-          });
-          addedCount++;
-        } else if (
-          existing.is_available &&
-          (existing.wave_booked_count || 0) === 0 &&
-          existing.is_wave !== slotDef.isWave
-        ) {
-          // Sync unbooked future slot mode with doctor's updated scheduling policy
-          existing.is_wave = slotDef.isWave;
-          existing.wave_capacity = slotDef.waveCapacity;
-          addedCount++;
-        }
+        this.state.counters.availabilityId += 1;
+        this.state.availability.push({
+          availability_id: this.state.counters.availabilityId,
+          doctor_id: doctorId,
+          available_date: dateStr,
+          start_time: slotDef.startTime,
+          end_time: slotDef.endTime,
+          slot_duration: slotDef.slotDuration,
+          is_available: true,
+          is_wave: slotDef.isWave,
+          wave_capacity: slotDef.waveCapacity,
+          wave_booked_count: 0,
+          parent_availability_id: null,
+          created_at: new Date().toISOString(),
+        });
+        addedCount++;
       }
     }
 
@@ -1025,26 +1526,122 @@ class LocalDatabase {
   public getDoctorAvailability(
     doctorId: number,
     date?: string,
-    onlyAvailable: boolean = false
+    onlyAvailable: boolean = false,
+    viewMode: "all" | "doctor" | "patient" = "patient"
   ): Availability[] {
     this.ensureDoctorAvailabilityWindow(doctorId, 14);
 
-    return this.state.availability
-      .filter((a) => {
-        if (a.doctor_id !== doctorId) return false;
-        if (date && a.available_date !== date) return false;
-        if (onlyAvailable) {
-          if (!a.is_available) return false;
-          if (isSlotInPast(a.available_date, a.start_time)) return false;
+    const doctorSlots = this.state.availability.filter((a) => {
+      if (a.doctor_id !== doctorId) return false;
+      if (date && a.available_date !== date) return false;
+      return true;
+    });
+
+    if (viewMode === "doctor") {
+      // Doctor Portal: Return top-level windows (parent_availability_id == null)
+      // Wave windows include nested subslots; Stream windows include dynamic appointment slot breakdown
+      const parentWindows = doctorSlots
+        .filter((a) => a.parent_availability_id == null)
+        .map((pw) => ({ ...pw }));
+
+      for (const pw of parentWindows) {
+        if (pw.is_wave) {
+          pw.subslots = doctorSlots
+            .filter((s) => s.parent_availability_id === pw.availability_id)
+            .sort((a, b) => a.start_time.localeCompare(b.start_time));
+          pw.wave_booked_count = pw.subslots.reduce((sum, s) => sum + (s.wave_booked_count || 0), 0);
+        } else {
+          // Stream window: calculate dynamic appointment breakdown
+          const activeBookings = this.state.appointments.filter(
+            (app) =>
+              app.doctor_id === doctorId &&
+              app.status !== "cancelled" &&
+              app.status !== "rejected" &&
+              (app.availability_id === pw.availability_id ||
+                (typeof app.appointment_date === "string" && app.appointment_date.startsWith(pw.available_date)))
+          );
+          const dynSlots = calculateStreamAppointmentTimes(pw, activeBookings);
+          (pw as any).dynamic_slots = dynSlots;
+          pw.wave_booked_count = activeBookings.filter((b) => {
+            const time = b.estimated_consult_time || (typeof b.appointment_date === "string" && b.appointment_date.slice(11, 16));
+            return time && time >= pw.start_time && time < pw.end_time;
+          }).length;
         }
-        return true;
-      })
-      .sort((a, b) => {
+      }
+
+      return parentWindows.sort((a, b) => {
         if (a.available_date !== b.available_date) {
           return a.available_date.localeCompare(b.available_date);
         }
         return a.start_time.localeCompare(b.start_time);
       });
+    }
+
+    // Patient view (default):
+    // Returns bookable slots:
+    // - For Wave: returns wave subslots (where parent_availability_id != null or standalone wave slots)
+    // - For Stream: dynamically computes appointment times from the continuous window
+    const bookableSlots: Availability[] = [];
+
+    for (const slot of doctorSlots) {
+      if (slot.is_blocked) continue;
+      if (slot.is_wave) {
+        const hasChildren = doctorSlots.some((s) => s.parent_availability_id === slot.availability_id);
+        if (hasChildren) {
+          continue; // Container parent; individual waves will be returned
+        }
+        if (onlyAvailable) {
+          if (!slot.is_available) continue;
+          if (isSlotInPast(slot.available_date, slot.start_time)) continue;
+        }
+        bookableSlots.push({ ...slot });
+      } else {
+        const subDefs = generateTimeSlots(slot.start_time, slot.end_time, slot.slot_duration);
+        if (subDefs.length > 1) {
+          const activeBookings = this.state.appointments.filter(
+            (app) =>
+              app.doctor_id === doctorId &&
+              app.status !== "cancelled" &&
+              app.status !== "rejected" &&
+              (app.availability_id === slot.availability_id ||
+                (typeof app.appointment_date === "string" && app.appointment_date.startsWith(slot.available_date)))
+          );
+          const dynSlots = calculateStreamAppointmentTimes(slot, activeBookings);
+          for (const ds of dynSlots) {
+            if (onlyAvailable) {
+              if (!ds.isAvailable) continue;
+              if (isSlotInPast(slot.available_date, ds.startTime)) continue;
+            }
+            bookableSlots.push({
+              availability_id: slot.availability_id,
+              doctor_id: slot.doctor_id,
+              available_date: slot.available_date,
+              start_time: ds.startTime,
+              end_time: ds.endTime,
+              slot_duration: ds.slotDuration,
+              is_available: ds.isAvailable,
+              is_wave: false,
+              wave_capacity: ds.capacity,
+              wave_booked_count: ds.bookedCount,
+              parent_availability_id: null,
+            });
+          }
+        } else {
+          if (onlyAvailable) {
+            if (!slot.is_available) continue;
+            if (isSlotInPast(slot.available_date, slot.start_time)) continue;
+          }
+          bookableSlots.push({ ...slot });
+        }
+      }
+    }
+
+    return bookableSlots.sort((a, b) => {
+      if (a.available_date !== b.available_date) {
+        return a.available_date.localeCompare(b.available_date);
+      }
+      return a.start_time.localeCompare(b.start_time);
+    });
   }
 
   public getAvailabilityById(
@@ -1062,7 +1659,8 @@ class LocalDatabase {
     endTime: string,
     slotDuration: number = 30,
     isWave?: boolean,
-    waveCapacity?: number
+    waveCapacity?: number,
+    parentAvailabilityId?: number | null
   ): Availability {
     // Check doctor exists
     const doctor = this.getDoctorById(doctorId);
@@ -1073,16 +1671,19 @@ class LocalDatabase {
       throw new Error("Cannot add availability for a past date or time.");
     }
 
-    // Check duplicate or overlap
-    const existing = this.state.availability.find(
+    // Interval overlap check (ignore if this is a subslot belonging to parent window)
+    const overlapping = this.state.availability.filter(
       (a) =>
         a.doctor_id === doctorId &&
         a.available_date === availableDate &&
-        a.start_time === startTime
+        !(parentAvailabilityId && a.availability_id === parentAvailabilityId) &&
+        !(a.parent_availability_id && parentAvailabilityId === a.parent_availability_id) &&
+        doIntervalsOverlap(a.start_time, a.end_time, startTime, endTime)
     );
-    if (existing) {
+
+    if (overlapping.length > 0) {
       throw new Error(
-        `A slot at ${startTime} on ${availableDate} already exists for this doctor.`
+        `A slot at ${startTime} on ${availableDate} already exists or overlaps with existing availability (${overlapping[0].start_time}–${overlapping[0].end_time}) for this doctor.`
       );
     }
 
@@ -1106,11 +1707,694 @@ class LocalDatabase {
       is_wave: resolvedIsWave,
       wave_capacity: resolvedWaveCapacity,
       wave_booked_count: 0,
+      parent_availability_id: parentAvailabilityId || null,
       created_at: new Date().toISOString(),
     };
     this.state.availability.push(newSlot);
     this.commit();
     return newSlot;
+  }
+
+  public createDoctorSchedule(params: {
+    doctorId: number;
+    scheduleType: "specific_dates" | "recurring_weekly";
+    schedulingMode: "stream" | "wave";
+    targetDates: string[];
+    startTime: string;
+    endTime: string;
+    slotDuration: number;
+    capacity?: number;
+    isOverride?: boolean;
+  }): {
+    addedCount: number;
+    skippedCount: number;
+    replacedCount: number;
+    datesCount: number;
+    slots: Availability[];
+  } {
+    const doctor = this.getDoctorById(params.doctorId);
+    if (!doctor) throw new Error("Doctor does not exist.");
+
+    let addedCount = 0;
+    let skippedCount = 0;
+    let replacedCount = 0;
+    const addedSlots: Availability[] = [];
+
+    for (const dateStr of params.targetDates) {
+      if (isSlotInPast(dateStr, params.startTime)) {
+        skippedCount++;
+        continue;
+      }
+
+      if (params.isOverride) {
+        // Override: Replace existing schedule for dateStr, strictly preserving booked appointments
+        const activeAppointments = this.state.appointments.filter(
+          (a) =>
+            a.doctor_id === params.doctorId &&
+            a.status !== "cancelled" &&
+            a.status !== "rejected" &&
+            (typeof a.appointment_date === "string" && a.appointment_date.startsWith(dateStr))
+        );
+        const bookedSlotIds = new Set(activeAppointments.map((a) => a.availability_id));
+
+        // Flag any active appointments that fall outside the new hours
+        for (const app of activeAppointments) {
+          const consultTime =
+            app.estimated_consult_time ||
+            (typeof app.appointment_date === "string" ? app.appointment_date.slice(11, 16) : "");
+          if (consultTime && (consultTime < params.startTime || consultTime >= params.endTime)) {
+            app.is_outside_schedule = true;
+            app.requires_review = true;
+            app.review_reason = `Booked outside updated working hours (${params.startTime} - ${params.endTime})`;
+          } else if (app.is_outside_schedule) {
+            app.is_outside_schedule = false;
+            app.requires_review = false;
+            app.review_reason = null;
+          }
+        }
+
+        this.state.availability = this.state.availability.filter((a) => {
+          if (a.doctor_id === params.doctorId && a.available_date === dateStr) {
+            if (bookedSlotIds.has(a.availability_id)) {
+              // Preserve booked slot so existing appointment is not invalidated
+              a.is_available = false;
+              return true;
+            }
+            if (a.parent_availability_id == null) {
+              replacedCount++;
+            }
+            return false;
+          }
+          return true;
+        });
+      } else {
+        const existingWindows = this.state.availability.filter(
+          (a) => a.doctor_id === params.doctorId && a.available_date === dateStr && a.parent_availability_id == null
+        );
+
+        const overlapping = existingWindows.filter((w) =>
+          doIntervalsOverlap(w.start_time, w.end_time, params.startTime, params.endTime)
+        );
+
+        if (overlapping.length > 0) {
+          // Check if this is an identical configuration (exact re-submission)
+          const isIdentical = overlapping.some(
+            (w) =>
+              w.start_time === params.startTime &&
+              w.end_time === params.endTime &&
+              w.slot_duration === params.slotDuration &&
+              Boolean(w.is_wave) === (params.schedulingMode === "wave")
+          );
+
+          if (isIdentical) {
+            // Idempotent: re-running identical configuration does not create duplicates
+            skippedCount++;
+            continue;
+          }
+
+          throw new Error(
+            `Overlapping availability window exists on ${dateStr} (${overlapping[0].start_time}–${overlapping[0].end_time}). Set override to replace existing schedule.`
+          );
+        }
+      }
+
+      const effectiveCap = params.capacity || (params.schedulingMode === "wave" ? 3 : 1);
+
+      // Create new schedule for dateStr
+      if (params.schedulingMode === "wave") {
+        // Parent window
+        this.state.counters.availabilityId += 1;
+        const parentWindow: Availability = {
+          availability_id: this.state.counters.availabilityId,
+          doctor_id: params.doctorId,
+          available_date: dateStr,
+          start_time: params.startTime,
+          end_time: params.endTime,
+          slot_duration: params.slotDuration,
+          is_available: true,
+          is_wave: true,
+          wave_capacity: effectiveCap,
+          wave_booked_count: 0,
+          parent_availability_id: null,
+          created_at: new Date().toISOString(),
+        };
+        this.state.availability.push(parentWindow);
+        addedSlots.push(parentWindow);
+        addedCount++;
+
+        // Non-overlapping subslots
+        const subslotDefs = generateTimeSlots(params.startTime, params.endTime, params.slotDuration);
+        for (const s of subslotDefs) {
+          this.state.counters.availabilityId += 1;
+          const subslot: Availability = {
+            availability_id: this.state.counters.availabilityId,
+            doctor_id: params.doctorId,
+            available_date: dateStr,
+            start_time: s.startTime,
+            end_time: s.endTime,
+            slot_duration: s.slotDuration,
+            is_available: true,
+            is_wave: true,
+            wave_capacity: effectiveCap,
+            wave_booked_count: 0,
+            parent_availability_id: parentWindow.availability_id,
+            created_at: new Date().toISOString(),
+          };
+          this.state.availability.push(subslot);
+          addedSlots.push(subslot);
+          addedCount++;
+        }
+      } else {
+        // Stream Mode: Single continuous availability window (NO subslots persisted)
+        const subDefs = generateTimeSlots(params.startTime, params.endTime, params.slotDuration);
+        const streamTotalCapacity =
+          params.capacity && params.capacity > 1
+            ? params.capacity
+            : subDefs.length > 0
+            ? subDefs.length
+            : 1;
+
+        this.state.counters.availabilityId += 1;
+        const streamWindow: Availability = {
+          availability_id: this.state.counters.availabilityId,
+          doctor_id: params.doctorId,
+          available_date: dateStr,
+          start_time: params.startTime,
+          end_time: params.endTime,
+          slot_duration: params.slotDuration,
+          is_available: true,
+          is_wave: false,
+          wave_capacity: streamTotalCapacity,
+          wave_booked_count: 0,
+          parent_availability_id: null,
+          created_at: new Date().toISOString(),
+        };
+        this.state.availability.push(streamWindow);
+        addedSlots.push(streamWindow);
+        addedCount++;
+      }
+    }
+
+    if (addedSlots.length > 0 || replacedCount > 0) {
+      this.commit();
+    }
+
+    return {
+      addedCount,
+      skippedCount,
+      replacedCount,
+      datesCount: params.targetDates.length,
+      slots: addedSlots,
+    };
+  }
+
+  /**
+   * Modifies a specific availability window elastically (shrinking or expanding)
+   * while strictly preserving all existing booked appointments and data integrity.
+   */
+  public modifyDoctorAvailabilityWindowElastic(params: {
+    doctorId: number;
+    availabilityId: number;
+    newStartTime: string;
+    newEndTime: string;
+    slotDuration?: number;
+    capacity?: number;
+  }): {
+    window: Availability;
+    addedSlotsCount: number;
+    removedSlotsCount: number;
+    preservedSlotsCount: number;
+    flaggedAppointmentsCount: number;
+    flaggedAppointments: Appointment[];
+  } {
+    const doctor = this.getDoctorById(params.doctorId);
+    if (!doctor) throw new Error("Doctor does not exist.");
+
+    let targetWindow = this.state.availability.find(
+      (a) => a.availability_id === params.availabilityId && a.doctor_id === params.doctorId
+    );
+    if (!targetWindow) {
+      throw new Error("Availability window not found.");
+    }
+
+    // If passed a subslot ID, resolve to its parent window
+    if (targetWindow.parent_availability_id != null) {
+      const parent = this.state.availability.find(
+        (a) => a.availability_id === targetWindow!.parent_availability_id
+      );
+      if (parent) {
+        targetWindow = parent;
+      }
+    }
+
+    if (isSlotInPast(targetWindow.available_date, params.newStartTime)) {
+      throw new Error("Cannot modify availability for a past date or time.");
+    }
+
+    if (params.newStartTime >= params.newEndTime) {
+      throw new Error("End time must be strictly after start time.");
+    }
+
+    // Save snapshot for atomic rollback in case of error
+    const stateSnapshot = JSON.stringify(this.state);
+
+    try {
+      // Collision protection with other independent windows on the same date
+      const otherWindows = this.state.availability.filter(
+        (a) =>
+          a.doctor_id === params.doctorId &&
+          a.available_date === targetWindow!.available_date &&
+          a.parent_availability_id == null &&
+          a.availability_id !== targetWindow!.availability_id &&
+          !a.is_blocked
+      );
+
+      for (const other of otherWindows) {
+        if (doIntervalsOverlap(other.start_time, other.end_time, params.newStartTime, params.newEndTime)) {
+          throw new Error(
+            `Expanded window overlaps with another scheduled window on ${targetWindow!.available_date} (${other.start_time}–${other.end_time}).`
+          );
+        }
+      }
+
+      const effectiveDuration = params.slotDuration || targetWindow.slot_duration;
+      const effectiveCapacity =
+        params.capacity !== undefined
+          ? params.capacity
+          : targetWindow.wave_capacity || (targetWindow.is_wave ? 3 : 1);
+
+      let addedSlotsCount = 0;
+      let removedSlotsCount = 0;
+      let preservedSlotsCount = 0;
+      const flaggedAppointments: Appointment[] = [];
+
+      // Query active booked appointments on this date
+      const activeAppointments = this.state.appointments.filter(
+        (a) =>
+          a.doctor_id === params.doctorId &&
+          a.status !== "cancelled" &&
+          a.status !== "rejected" &&
+          (a.availability_id === targetWindow!.availability_id ||
+            (typeof a.appointment_date === "string" && a.appointment_date.startsWith(targetWindow!.available_date)))
+      );
+
+      if (targetWindow.is_wave) {
+        // Wave Scheduling Mode
+        const existingSubslots = this.state.availability.filter(
+          (a) => a.parent_availability_id === targetWindow!.availability_id
+        );
+
+        const targetNewDefs = generateTimeSlots(params.newStartTime, params.newEndTime, effectiveDuration);
+        const targetDefKeySet = new Set(targetNewDefs.map((d) => `${d.startTime}-${d.endTime}`));
+        const existingKeySet = new Set(existingSubslots.map((s) => `${s.start_time}-${s.end_time}`));
+
+        // 1. Process existing subslots
+        for (const sub of existingSubslots) {
+          const subKey = `${sub.start_time}-${sub.end_time}`;
+          const isInsideNew = targetDefKeySet.has(subKey);
+
+          if (isInsideNew) {
+            // Preserved within new window
+            preservedSlotsCount++;
+            sub.wave_capacity = effectiveCapacity;
+            sub.slot_duration = effectiveDuration;
+
+            // Clear previous flags if any appointment on this subslot was previously flagged
+            for (const app of activeAppointments) {
+              if (app.availability_id === sub.availability_id && app.is_outside_schedule) {
+                app.is_outside_schedule = false;
+                app.requires_review = false;
+                app.review_reason = null;
+              }
+            }
+          } else {
+            // Outside new window (shrunk range)
+            const appsInSub = activeAppointments.filter((a) => a.availability_id === sub.availability_id);
+            if (appsInSub.length === 0) {
+              // Unbooked subslot: safely remove from database
+              this.state.availability = this.state.availability.filter(
+                (a) => a.availability_id !== sub.availability_id
+              );
+              removedSlotsCount++;
+            } else {
+              // Subslot has active booked appointments! MUST PRESERVE
+              sub.is_available = false; // Soft-deactivate so no new bookings occur
+              for (const app of appsInSub) {
+                app.is_outside_schedule = true;
+                app.requires_review = true;
+                app.review_reason = `Booked outside updated working hours (${params.newStartTime} - ${params.newEndTime})`;
+                flaggedAppointments.push(app);
+              }
+            }
+          }
+        }
+
+        // 2. Process newly added subslots (expansion)
+        for (const def of targetNewDefs) {
+          const defKey = `${def.startTime}-${def.endTime}`;
+          if (!existingKeySet.has(defKey)) {
+            this.state.counters.availabilityId += 1;
+            const newSub: Availability = {
+              availability_id: this.state.counters.availabilityId,
+              doctor_id: params.doctorId,
+              available_date: targetWindow.available_date,
+              start_time: def.startTime,
+              end_time: def.endTime,
+              slot_duration: def.slotDuration,
+              is_available: true,
+              is_wave: true,
+              wave_capacity: effectiveCapacity,
+              wave_booked_count: 0,
+              parent_availability_id: targetWindow.availability_id,
+              created_at: new Date().toISOString(),
+            };
+            this.state.availability.push(newSub);
+            addedSlotsCount++;
+          }
+        }
+
+        // 3. Update parent window
+        targetWindow.start_time = params.newStartTime;
+        targetWindow.end_time = params.newEndTime;
+        targetWindow.slot_duration = effectiveDuration;
+        targetWindow.wave_capacity = effectiveCapacity;
+      } else {
+        // Stream Scheduling Mode
+        const diff = calculateElasticDiff(
+          targetWindow.start_time,
+          targetWindow.end_time,
+          params.newStartTime,
+          params.newEndTime,
+          effectiveDuration
+        );
+
+        addedSlotsCount = diff.addedSlots.length;
+        removedSlotsCount = diff.removedSlots.length;
+        preservedSlotsCount = diff.preservedSlots.length;
+
+        // Flag or unflag active appointments on this date
+        for (const app of activeAppointments) {
+          const consultTime =
+            app.estimated_consult_time ||
+            (typeof app.appointment_date === "string" ? app.appointment_date.slice(11, 16) : "");
+          if (consultTime) {
+            const isInside = consultTime >= params.newStartTime && consultTime < params.newEndTime;
+            if (isInside) {
+              if (app.is_outside_schedule) {
+                app.is_outside_schedule = false;
+                app.requires_review = false;
+                app.review_reason = null;
+              }
+            } else {
+              app.is_outside_schedule = true;
+              app.requires_review = true;
+              app.review_reason = `Booked outside updated working hours (${params.newStartTime} - ${params.newEndTime})`;
+              flaggedAppointments.push(app);
+            }
+          }
+        }
+
+        // Update continuous window
+        targetWindow.start_time = params.newStartTime;
+        targetWindow.end_time = params.newEndTime;
+        targetWindow.slot_duration = effectiveDuration;
+        const subDefs = generateTimeSlots(params.newStartTime, params.newEndTime, effectiveDuration);
+        targetWindow.wave_capacity = subDefs.length;
+      }
+
+      this.commit();
+
+      return {
+        window: targetWindow,
+        addedSlotsCount,
+        removedSlotsCount,
+        preservedSlotsCount,
+        flaggedAppointmentsCount: flaggedAppointments.length,
+        flaggedAppointments: flaggedAppointments.map((a) => this.hydrateAppointment(a)),
+      };
+    } catch (err) {
+      // Atomic rollback on failure
+      this.state = JSON.parse(stateSnapshot);
+      throw err;
+    }
+  }
+
+  /**
+   * Applies elastic schedule modification across multiple dates or recurring patterns.
+   */
+  public modifyDoctorScheduleElastic(params: {
+    doctorId: number;
+    scheduleType: "specific_dates" | "recurring_weekly";
+    targetDates?: string[];
+    weekdays?: number[];
+    startDate?: string;
+    endDate?: string;
+    newStartTime: string;
+    newEndTime: string;
+    slotDuration?: number;
+    capacity?: number;
+    isWave?: boolean;
+  }): {
+    success: boolean;
+    modifiedDatesCount: number;
+    addedSlotsCount: number;
+    removedSlotsCount: number;
+    flaggedAppointmentsCount: number;
+    flaggedAppointments: Appointment[];
+    message: string;
+  } {
+    const dates = resolveTargetDates({
+      scheduleType: params.scheduleType,
+      specificDates: params.targetDates,
+      weekdays: params.weekdays,
+      startDate: params.startDate,
+      endDate: params.endDate,
+    });
+
+    if (dates.length === 0) {
+      throw new Error("No upcoming operating dates resolved for elastic modification.");
+    }
+
+    const stateSnapshot = JSON.stringify(this.state);
+    let totalAdded = 0;
+    let totalRemoved = 0;
+    let modifiedDates = 0;
+    const allFlagged: Appointment[] = [];
+
+    try {
+      for (const d of dates) {
+        if (isSlotInPast(d, params.newStartTime)) continue;
+
+        const existingWindows = this.state.availability.filter(
+          (a) => a.doctor_id === params.doctorId && a.available_date === d && a.parent_availability_id == null && !a.is_blocked
+        );
+
+        if (existingWindows.length > 0) {
+          // Elastically modify the existing window
+          const res = this.modifyDoctorAvailabilityWindowElastic({
+            doctorId: params.doctorId,
+            availabilityId: existingWindows[0].availability_id,
+            newStartTime: params.newStartTime,
+            newEndTime: params.newEndTime,
+            slotDuration: params.slotDuration,
+            capacity: params.capacity,
+          });
+          totalAdded += res.addedSlotsCount;
+          totalRemoved += res.removedSlotsCount;
+          allFlagged.push(...res.flaggedAppointments);
+          modifiedDates++;
+        } else {
+          // Create fresh schedule on this date
+          const created = this.createDoctorSchedule({
+            doctorId: params.doctorId,
+            scheduleType: "specific_dates",
+            schedulingMode: params.isWave ? "wave" : "stream",
+            targetDates: [d],
+            startTime: params.newStartTime,
+            endTime: params.newEndTime,
+            slotDuration: params.slotDuration || 30,
+            capacity: params.capacity || (params.isWave ? 3 : 1),
+            isOverride: false,
+          });
+          totalAdded += created.addedCount;
+          modifiedDates++;
+        }
+      }
+
+      this.commit();
+
+      return {
+        success: true,
+        modifiedDatesCount: modifiedDates,
+        addedSlotsCount: totalAdded,
+        removedSlotsCount: totalRemoved,
+        flaggedAppointmentsCount: allFlagged.length,
+        flaggedAppointments: allFlagged,
+        message: `Successfully updated schedule across ${modifiedDates} date(s). Added ${totalAdded} slot(s), removed ${totalRemoved} slot(s). ${allFlagged.length} appointment(s) preserved outside updated hours.`,
+      };
+    } catch (err) {
+      this.state = JSON.parse(stateSnapshot);
+      throw err;
+    }
+  }
+
+  /**
+   * Deterministic preview of elastic schedule changes before saving.
+   * Reports newly added slots, removed unbooked slots, preserved slots, and any booked appointments falling outside.
+   */
+  public previewDoctorScheduleElasticChanges(params: {
+    doctorId: number;
+    availabilityId?: number;
+    scheduleType?: "specific_dates" | "recurring_weekly";
+    targetDates?: string[];
+    weekdays?: number[];
+    startDate?: string;
+    endDate?: string;
+    newStartTime: string;
+    newEndTime: string;
+    slotDuration?: number;
+    capacity?: number;
+    isWave?: boolean;
+  }): {
+    datesCount: number;
+    addedSlots: Array<{ date: string; time: string }>;
+    removedSlots: Array<{ date: string; time: string }>;
+    preservedSlotsCount: number;
+    conflictingAppointments: Array<{
+      appointmentId: number;
+      patientName: string;
+      patientPhone?: string;
+      patientEmail?: string;
+      date: string;
+      time: string;
+      reason: string;
+      status: string;
+    }>;
+    hasConflicts: boolean;
+  } {
+    let dates: string[] = [];
+    let singleTargetWindow: Availability | undefined;
+
+    if (params.availabilityId) {
+      singleTargetWindow = this.state.availability.find(
+        (a) => a.availability_id === params.availabilityId && a.doctor_id === params.doctorId
+      );
+      if (singleTargetWindow) {
+        if (singleTargetWindow.parent_availability_id != null) {
+          const parent = this.state.availability.find(
+            (a) => a.availability_id === singleTargetWindow!.parent_availability_id
+          );
+          if (parent) singleTargetWindow = parent;
+        }
+        dates = [singleTargetWindow.available_date];
+      }
+    } else {
+      dates = resolveTargetDates({
+        scheduleType: params.scheduleType || "specific_dates",
+        specificDates: params.targetDates,
+        weekdays: params.weekdays,
+        startDate: params.startDate,
+        endDate: params.endDate,
+      });
+    }
+
+    const addedSlots: Array<{ date: string; time: string }> = [];
+    const removedSlots: Array<{ date: string; time: string }> = [];
+    let preservedSlotsCount = 0;
+    const conflictingAppointments: Array<{
+      appointmentId: number;
+      patientName: string;
+      patientPhone?: string;
+      patientEmail?: string;
+      date: string;
+      time: string;
+      reason: string;
+      status: string;
+    }> = [];
+
+    const effectiveDuration = params.slotDuration || singleTargetWindow?.slot_duration || 30;
+
+    for (const d of dates) {
+      if (isSlotInPast(d, params.newStartTime)) continue;
+
+      const window =
+        singleTargetWindow && singleTargetWindow.available_date === d
+          ? singleTargetWindow
+          : this.state.availability.find(
+              (a) => a.doctor_id === params.doctorId && a.available_date === d && a.parent_availability_id == null && !a.is_blocked
+            );
+
+      if (window) {
+        const diff = calculateElasticDiff(
+          window.start_time,
+          window.end_time,
+          params.newStartTime,
+          params.newEndTime,
+          effectiveDuration
+        );
+
+        diff.addedSlots.forEach((s) => addedSlots.push({ date: d, time: `${s.startTime} – ${s.endTime}` }));
+        diff.removedSlots.forEach((s) => removedSlots.push({ date: d, time: `${s.startTime} – ${s.endTime}` }));
+        preservedSlotsCount += diff.preservedSlots.length;
+
+        // Check booked appointments on this date
+        const activeApps = this.state.appointments.filter(
+          (a) =>
+            a.doctor_id === params.doctorId &&
+            a.status !== "cancelled" &&
+            a.status !== "rejected" &&
+            (a.availability_id === window.availability_id ||
+              (typeof a.appointment_date === "string" && a.appointment_date.startsWith(d)))
+        );
+
+        for (const app of activeApps) {
+          const consultTime =
+            app.estimated_consult_time ||
+            (typeof app.appointment_date === "string" ? app.appointment_date.slice(11, 16) : "");
+          if (consultTime && (consultTime < params.newStartTime || consultTime >= params.newEndTime)) {
+            const patient = this.getPatientById(app.patient_id);
+            conflictingAppointments.push({
+              appointmentId: app.appointment_id,
+              patientName: patient?.user?.full_name || "Patient",
+              patientPhone: patient?.user?.phone,
+              patientEmail: patient?.user?.email,
+              date: d,
+              time: consultTime,
+              reason: app.reason,
+              status: app.status,
+            });
+          }
+        }
+      } else {
+        const slots = generateTimeSlots(params.newStartTime, params.newEndTime, effectiveDuration);
+        slots.forEach((s) => addedSlots.push({ date: d, time: `${s.startTime} – ${s.endTime}` }));
+      }
+    }
+
+    return {
+      datesCount: dates.length,
+      addedSlots,
+      removedSlots,
+      preservedSlotsCount,
+      conflictingAppointments,
+      hasConflicts: conflictingAppointments.length > 0,
+    };
+  }
+
+  /**
+   * Retrieves all appointments for a doctor that require review
+   * (e.g. booked outside modified working hours).
+   */
+  public getAppointmentsRequiringReview(doctorId: number): Appointment[] {
+    return this.state.appointments
+      .filter(
+        (a) =>
+          a.doctor_id === doctorId &&
+          a.status !== "cancelled" &&
+          a.status !== "rejected" &&
+          (a.requires_review === true || a.is_outside_schedule === true)
+      )
+      .map((a) => this.hydrateAppointment(a));
   }
 
   public addAvailabilityBatch(params: {
@@ -1122,6 +2406,7 @@ class LocalDatabase {
       slot_duration: number;
       is_wave?: boolean;
       wave_capacity?: number;
+      parent_availability_id?: number | null;
     }>;
   }): { addedCount: number; skippedCount: number; slots: Availability[] } {
     const doctor = this.getDoctorById(params.doctorId);
@@ -1141,7 +2426,8 @@ class LocalDatabase {
         (a) =>
           a.doctor_id === params.doctorId &&
           a.available_date === item.available_date &&
-          a.start_time === item.start_time
+          a.start_time === item.start_time &&
+          a.end_time === item.end_time
       );
 
       if (exists) {
@@ -1166,6 +2452,7 @@ class LocalDatabase {
         is_wave: isWave,
         wave_capacity: resolvedCapacity,
         wave_booked_count: 0,
+        parent_availability_id: item.parent_availability_id || null,
         created_at: new Date().toISOString(),
       };
 
@@ -1198,10 +2485,16 @@ class LocalDatabase {
       throw new Error("Unauthorized: You do not own this availability slot.");
     }
 
-    // Check if slot has active appointments
+    // If deleting a parent window, check child subslots as well
+    const childSubslots = this.state.availability.filter(
+      (a) => a.parent_availability_id === availabilityId
+    );
+    const allSlotIdsToCheck = [availabilityId, ...childSubslots.map((s) => s.availability_id)];
+
+    // Check if any of these slots have active appointments
     const activeAppointment = this.state.appointments.find(
       (app) =>
-        app.availability_id === availabilityId &&
+        allSlotIdsToCheck.includes(app.availability_id) &&
         app.status !== "cancelled" &&
         app.status !== "rejected"
     );
@@ -1211,7 +2504,10 @@ class LocalDatabase {
       );
     }
 
-    this.state.availability.splice(slotIndex, 1);
+    // Remove slot and its child subslots
+    this.state.availability = this.state.availability.filter(
+      (a) => !allSlotIdsToCheck.includes(a.availability_id)
+    );
     this.commit();
     return true;
   }
@@ -1222,8 +2518,11 @@ class LocalDatabase {
     doctorId: number;
     availabilityId: number;
     reason: string;
+    slotTime?: string;
+    bookedByUserId?: number;
+    bookedByRole?: UserRole;
   }): Appointment {
-    const { patientId, doctorId, availabilityId, reason } = params;
+    const { patientId, doctorId, availabilityId, reason, slotTime, bookedByUserId, bookedByRole } = params;
 
     // Verify patient
     const patient = this.getPatientById(patientId);
@@ -1232,6 +2531,17 @@ class LocalDatabase {
     // Verify doctor
     const doctor = this.getDoctorById(doctorId);
     if (!doctor) throw new Error("Doctor record not found.");
+
+    // Receptionist authorization & clinic scope check
+    if (bookedByRole === "receptionist") {
+      if (!bookedByUserId) {
+        throw new Error("Receptionist user ID is required when booking as receptionist.");
+      }
+      const receptionist = this.getReceptionistByUserId(bookedByUserId);
+      if (!receptionist || receptionist.clinic_id !== doctor.clinic_id) {
+        throw new Error("Unauthorized: Receptionists can only book appointments for doctors within their assigned clinic.");
+      }
+    }
 
     // Atomic slot check & lock
     const slot = this.getAvailabilityById(availabilityId);
@@ -1245,12 +2555,19 @@ class LocalDatabase {
       );
     }
 
+    if (slot.is_blocked) {
+      throw new Error(
+        `This schedule is unavailable: ${slot.block_reason || "The doctor has blocked this date/window."}`
+      );
+    }
+
     if (isSlotInPast(slot.available_date, slot.start_time)) {
       throw new Error("Cannot book an appointment for a past date or time.");
     }
 
     let waveNum: number | null = null;
     let estConsult: string | null = null;
+    let targetStartTime = slot.start_time;
 
     if (slot.is_wave) {
       const capacity = slot.wave_capacity || 3;
@@ -1271,24 +2588,58 @@ class LocalDatabase {
       if (slot.wave_booked_count >= capacity) {
         slot.is_available = false;
       }
+
+      if (slot.parent_availability_id) {
+        const parent = this.getAvailabilityById(slot.parent_availability_id);
+        if (parent) {
+          parent.wave_booked_count = (parent.wave_booked_count || 0) + 1;
+        }
+      }
     } else {
-      const capacity = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : 1;
-      const currentBooked = slot.wave_booked_count || 0;
-      if (currentBooked >= capacity || !slot.is_available) {
+      // Stream Mode
+      targetStartTime = slotTime || slot.start_time;
+      const validSlots = generateTimeSlots(slot.start_time, slot.end_time, slot.slot_duration);
+      if (validSlots.length === 0 || !validSlots.some((s) => s.startTime === targetStartTime)) {
         throw new Error(
-          "This time slot has already been booked by another patient. Please choose an alternative slot."
+          `Time slot ${targetStartTime} is unavailable or outside doctor's schedule hours.`
+        );
+      }
+      const subslotCount = validSlots.length;
+      const slotTimeCapacity =
+        subslotCount > 0
+          ? Math.max(1, Math.floor((slot.wave_capacity || subslotCount) / subslotCount))
+          : 1;
+
+      // Protection against concurrent or double booking for the exact appointment date and time
+      const activeAtSameTime = this.state.appointments.filter(
+        (a) =>
+          a.doctor_id === doctorId &&
+          a.status !== "cancelled" &&
+          a.status !== "rejected" &&
+          (a.availability_id === slot.availability_id ||
+            (typeof a.appointment_date === "string" && a.appointment_date.startsWith(slot.available_date))) &&
+          (a.estimated_consult_time === targetStartTime ||
+            (typeof a.appointment_date === "string" && a.appointment_date.includes(`T${targetStartTime}:`)))
+      );
+
+      if (activeAtSameTime.length >= slotTimeCapacity || !slot.is_available) {
+        throw new Error(
+          `Time slot ${targetStartTime} has already been booked by another patient. Please choose an alternative slot.`
         );
       }
 
-      slot.wave_booked_count = currentBooked + 1;
-      if (slot.wave_booked_count >= capacity) {
+      slot.wave_booked_count = (slot.wave_booked_count || 0) + 1;
+      estConsult = targetStartTime;
+
+      const totalCapacity = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : subslotCount;
+      if (slot.wave_booked_count >= totalCapacity) {
         slot.is_available = false;
       }
     }
 
     // Create appointment
     this.state.counters.appointmentId += 1;
-    const appointmentDate = `${slot.available_date}T${slot.start_time}:00.000Z`;
+    const appointmentDate = `${slot.available_date}T${targetStartTime}:00.000Z`;
 
     const newAppointment: Appointment = {
       appointment_id: this.state.counters.appointmentId,
@@ -1301,6 +2652,11 @@ class LocalDatabase {
       reason: reason.trim(),
       wave_number: waveNum,
       estimated_consult_time: estConsult,
+      booked_by_user_id: bookedByUserId || null,
+      booked_by_role: bookedByRole || null,
+      is_outside_schedule: false,
+      requires_review: false,
+      review_reason: null,
       created_at: new Date().toISOString(),
     };
 
@@ -1314,11 +2670,12 @@ class LocalDatabase {
   public rescheduleAppointmentAtomic(params: {
     appointmentId: number;
     newAvailabilityId: number;
+    newSlotTime?: string;
     reason?: string;
     requesterUserId: number;
     requesterRole: UserRole;
   }): Appointment {
-    const { appointmentId, newAvailabilityId, reason, requesterUserId, requesterRole } = params;
+    const { appointmentId, newAvailabilityId, newSlotTime, reason, requesterUserId, requesterRole } = params;
 
     const appIndex = this.state.appointments.findIndex(
       (a) => a.appointment_id === appointmentId
@@ -1343,6 +2700,11 @@ class LocalDatabase {
       if (doctor.user_id !== requesterUserId) {
         throw new Error("Unauthorized: You cannot reschedule appointments for other practitioners.");
       }
+    } else if (requesterRole === "receptionist") {
+      const receptionist = this.getReceptionistByUserId(requesterUserId);
+      if (!receptionist || receptionist.clinic_id !== doctor.clinic_id) {
+        throw new Error("Unauthorized: Receptionists can only reschedule appointments for doctors within their assigned clinic.");
+      }
     }
 
     if (app.status !== "pending" && app.status !== "confirmed") {
@@ -1351,7 +2713,7 @@ class LocalDatabase {
       );
     }
 
-    if (app.availability_id === newAvailabilityId) {
+    if (app.availability_id === newAvailabilityId && (!newSlotTime || app.estimated_consult_time === newSlotTime)) {
       throw new Error("The selected appointment slot is identical to your current time slot.");
     }
 
@@ -1364,22 +2726,74 @@ class LocalDatabase {
       throw new Error("Rescheduling is only supported with the same consulting practitioner.");
     }
 
+    if (newSlot.is_blocked) {
+      throw new Error(
+        `Cannot reschedule to this slot: ${newSlot.block_reason || "The doctor has blocked this schedule."}`
+      );
+    }
+
     if (isSlotInPast(newSlot.available_date, newSlot.start_time)) {
       throw new Error("Cannot reschedule an appointment to a past date or time.");
     }
 
     // Check availability of target slot
+    let waveNum: number | null = null;
+    let estConsult: string | null = null;
+    let newTargetStartTime = newSlot.start_time;
+
     if (newSlot.is_wave) {
       const cap = newSlot.wave_capacity || 3;
       const booked = newSlot.wave_booked_count || 0;
       if (booked >= cap || !newSlot.is_available) {
         throw new Error("The selected wave arrival window is already at full capacity. Please choose another window.");
       }
+      newSlot.wave_booked_count = (newSlot.wave_booked_count || 0) + 1;
+      waveNum = newSlot.wave_booked_count;
+      const [sh, sm] = newSlot.start_time.split(":").map(Number);
+      const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
+      const eh = Math.floor(totalMinutes / 60) % 24;
+      const em = totalMinutes % 60;
+      estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+
+      if (newSlot.wave_booked_count >= cap) {
+        newSlot.is_available = false;
+      }
+      if (newSlot.parent_availability_id) {
+        const parent = this.getAvailabilityById(newSlot.parent_availability_id);
+        if (parent) {
+          parent.wave_booked_count = (parent.wave_booked_count || 0) + 1;
+        }
+      }
     } else {
-      const cap = newSlot.wave_capacity && newSlot.wave_capacity > 0 ? newSlot.wave_capacity : 1;
-      const booked = newSlot.wave_booked_count || 0;
-      if (booked >= cap || !newSlot.is_available) {
-        throw new Error("The requested alternative time slot has already been reserved. Please select another slot.");
+      // Stream mode
+      newTargetStartTime = newSlotTime || newSlot.start_time;
+      const subslotCount = generateTimeSlots(newSlot.start_time, newSlot.end_time, newSlot.slot_duration).length;
+      const slotTimeCapacity =
+        subslotCount > 0
+          ? Math.max(1, Math.floor((newSlot.wave_capacity || subslotCount) / subslotCount))
+          : 1;
+
+      const collision = this.state.appointments.filter(
+        (a) =>
+          a.doctor_id === app.doctor_id &&
+          a.status !== "cancelled" &&
+          a.status !== "rejected" &&
+          (a.availability_id === newSlot.availability_id ||
+            (typeof a.appointment_date === "string" && a.appointment_date.startsWith(newSlot.available_date))) &&
+          (a.estimated_consult_time === newTargetStartTime ||
+            (typeof a.appointment_date === "string" && a.appointment_date.includes(`T${newTargetStartTime}:`)))
+      );
+      if (collision.length >= slotTimeCapacity || !newSlot.is_available) {
+        throw new Error(
+          `Time slot ${newTargetStartTime} has already been reserved. Please select another slot.`
+        );
+      }
+      newSlot.wave_booked_count = (newSlot.wave_booked_count || 0) + 1;
+      estConsult = newTargetStartTime;
+
+      const totalCapacity = newSlot.wave_capacity && newSlot.wave_capacity > 0 ? newSlot.wave_capacity : subslotCount;
+      if (newSlot.wave_booked_count >= totalCapacity) {
+        newSlot.is_available = false;
       }
     }
 
@@ -1388,31 +2802,18 @@ class LocalDatabase {
     if (oldSlot) {
       oldSlot.wave_booked_count = Math.max(0, (oldSlot.wave_booked_count || 1) - 1);
       oldSlot.is_available = true;
-    }
-
-    // Claim new slot
-    let waveNum: number | null = null;
-    let estConsult: string | null = null;
-
-    const newCap = newSlot.wave_capacity || (newSlot.is_wave ? 3 : 1);
-    newSlot.wave_booked_count = (newSlot.wave_booked_count || 0) + 1;
-
-    if (newSlot.is_wave) {
-      waveNum = newSlot.wave_booked_count;
-      const [sh, sm] = newSlot.start_time.split(":").map(Number);
-      const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
-      const eh = Math.floor(totalMinutes / 60) % 24;
-      const em = totalMinutes % 60;
-      estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
-    }
-
-    if (newSlot.wave_booked_count >= newCap) {
-      newSlot.is_available = false;
+      if (oldSlot.parent_availability_id) {
+        const parent = this.getAvailabilityById(oldSlot.parent_availability_id);
+        if (parent) {
+          parent.wave_booked_count = Math.max(0, (parent.wave_booked_count || 1) - 1);
+          parent.is_available = true;
+        }
+      }
     }
 
     const previousSlotId = app.availability_id;
     app.availability_id = newAvailabilityId;
-    app.appointment_date = `${newSlot.available_date}T${newSlot.start_time}:00.000Z`;
+    app.appointment_date = `${newSlot.available_date}T${newTargetStartTime}:00.000Z`;
     app.rescheduled_from_id = previousSlotId;
     app.wave_number = waveNum;
     app.estimated_consult_time = estConsult;
@@ -1424,7 +2825,7 @@ class LocalDatabase {
     this.createNotification({
       userId: patient.user_id,
       title: "Appointment Rescheduled",
-      message: `Your consultation with ${doctor.user?.full_name || "Dr. " + doctor.specialization} has been rescheduled to ${newSlot.available_date} at ${newSlot.start_time} IST.`,
+      message: `Your consultation with ${doctor.user?.full_name || "Dr. " + doctor.specialization} has been rescheduled to ${newSlot.available_date} at ${newTargetStartTime} IST.`,
       type: "rescheduled",
     });
 
@@ -1471,6 +2872,13 @@ class LocalDatabase {
       if (app.status === "completed") {
         throw new Error("Cannot cancel an already completed appointment.");
       }
+    } else if (requesterRole === "receptionist") {
+      const receptionist = this.getReceptionistByUserId(requesterUserId);
+      if (!receptionist || !doctor || receptionist.clinic_id !== doctor.clinic_id) {
+        throw new Error(
+          "Unauthorized: Receptionists can only modify appointments for doctors within their assigned clinic."
+        );
+      }
     }
 
     const oldStatus = app.status;
@@ -1486,6 +2894,13 @@ class LocalDatabase {
       if (slot) {
         slot.wave_booked_count = Math.max(0, (slot.wave_booked_count || 1) - 1);
         slot.is_available = true;
+        if (slot.parent_availability_id) {
+          const parent = this.getAvailabilityById(slot.parent_availability_id);
+          if (parent) {
+            parent.wave_booked_count = Math.max(0, (parent.wave_booked_count || 1) - 1);
+            parent.is_available = true;
+          }
+        }
       }
     }
 

@@ -1,12 +1,14 @@
 import { localDb } from "./local-store";
 import { isNeonConfigured, getNeonDb } from "./neon";
 import * as schema from "./schema";
-import { eq, and, or, gt, gte, desc, asc, sql, inArray } from "drizzle-orm";
+import { eq, ne, and, or, gt, gte, desc, asc, sql, inArray } from "drizzle-orm";
+import crypto from "crypto";
 import { isSlotInPast, getTodayIST } from "@/lib/utils/date";
 import {
   generateDoctorSlotsForDate,
   getRollingDateWindow,
 } from "@/lib/scheduling/doctor-schedule";
+import { generateTimeSlots } from "@/lib/scheduling/slot-generator";
 import {
   User,
   Patient,
@@ -31,6 +33,10 @@ import {
   NotificationLog,
   ScheduledReminder,
   PatientNotificationPreferences,
+  Clinic,
+  Receptionist,
+  ReceptionistInvitation,
+  InvitationStatus,
 } from "@/types/database";
 
 export const getDatabaseMode = (): "neon" | "local" => {
@@ -579,13 +585,17 @@ export const db = {
             )
           );
 
-        const existingSet = new Set(
-          existingSlots.map((s) => `${s.available_date}_${s.start_time}`)
+        const datesWithAvailability = new Set(
+          existingSlots.map((s) => s.available_date)
         );
 
         const slotsToInsert: Array<typeof schema.availability.$inferInsert> = [];
 
         for (const dateStr of dates) {
+          if (datesWithAvailability.has(dateStr)) {
+            continue;
+          }
+
           const candidateSlots = generateDoctorSlotsForDate(
             doctorId,
             dateStr,
@@ -594,42 +604,23 @@ export const db = {
           );
 
           for (const slotDef of candidateSlots) {
-            const key = `${dateStr}_${slotDef.startTime}`;
-            if (!existingSet.has(key)) {
-              slotsToInsert.push({
-                doctor_id: doctorId,
-                available_date: dateStr,
-                start_time: slotDef.startTime,
-                end_time: slotDef.endTime,
-                slot_duration: slotDef.slotDuration,
-                is_available: true,
-                is_wave: slotDef.isWave,
-                wave_capacity: slotDef.waveCapacity,
-                wave_booked_count: 0,
-              });
-              existingSet.add(key);
-            }
+            slotsToInsert.push({
+              doctor_id: doctorId,
+              available_date: dateStr,
+              start_time: slotDef.startTime,
+              end_time: slotDef.endTime,
+              slot_duration: slotDef.slotDuration,
+              is_available: true,
+              is_wave: slotDef.isWave,
+              wave_capacity: slotDef.waveCapacity,
+              wave_booked_count: 0,
+            });
           }
         }
 
         if (slotsToInsert.length > 0) {
           await neonDb.insert(schema.availability).values(slotsToInsert);
         }
-
-        // Sync unbooked future slots with current doctor scheduling policy
-        const resolvedIsWave = doctor.scheduling_mode === "wave";
-        const resolvedCap = resolvedIsWave ? doctor.wave_capacity || 3 : 1;
-        await neonDb
-          .update(schema.availability)
-          .set({ is_wave: resolvedIsWave, wave_capacity: resolvedCap })
-          .where(
-            and(
-              eq(schema.availability.doctor_id, doctorId),
-              gte(schema.availability.available_date, todayStr),
-              eq(schema.availability.is_available, true),
-              eq(schema.availability.wave_booked_count, 0)
-            )
-          );
         return;
       }
     }
@@ -639,44 +630,79 @@ export const db = {
   getDoctorAvailability: async (
     doctorId: number,
     date?: string,
-    onlyAvailable: boolean = false
+    onlyAvailable: boolean = false,
+    viewMode: "all" | "doctor" | "patient" = "patient"
   ): Promise<Availability[]> => {
-    // Dynamically ensure rolling window exists
-    await db.ensureDoctorAvailabilityWindow(doctorId, 14);
+    // Delegated to comprehensive availability resolver
+    return localDb.getDoctorAvailability(doctorId, date, onlyAvailable, viewMode);
+  },
 
-    if (isNeonConfigured) {
-      const neonDb = getNeonDb();
-      if (neonDb) {
-        const rows = await neonDb
-          .select()
-          .from(schema.availability)
-          .where(
-            and(
-              eq(schema.availability.doctor_id, doctorId),
-              date ? eq(schema.availability.available_date, date) : undefined,
-              onlyAvailable ? eq(schema.availability.is_available, true) : undefined
-            )
-          )
-          .orderBy(
-            asc(schema.availability.available_date),
-            asc(schema.availability.start_time)
-          );
+  createDoctorSchedule: async (params: {
+    doctorId: number;
+    scheduleType: "specific_dates" | "recurring_weekly";
+    schedulingMode: "stream" | "wave";
+    targetDates: string[];
+    startTime: string;
+    endTime: string;
+    slotDuration: number;
+    capacity?: number;
+    isOverride?: boolean;
+  }): Promise<{
+    addedCount: number;
+    skippedCount: number;
+    replacedCount: number;
+    datesCount: number;
+    slots: Availability[];
+  }> => {
+    return localDb.createDoctorSchedule(params);
+  },
 
-        let mapped = rows.map((r) => ({
-          ...r,
-          created_at: r.created_at.toISOString(),
-        }));
+  modifyDoctorAvailabilityWindowElastic: async (params: {
+    doctorId: number;
+    availabilityId: number;
+    newStartTime: string;
+    newEndTime: string;
+    slotDuration?: number;
+    capacity?: number;
+  }) => {
+    return localDb.modifyDoctorAvailabilityWindowElastic(params);
+  },
 
-        if (onlyAvailable) {
-          mapped = mapped.filter(
-            (slot) => !isSlotInPast(slot.available_date, slot.start_time)
-          );
-        }
+  modifyDoctorScheduleElastic: async (params: {
+    doctorId: number;
+    scheduleType: "specific_dates" | "recurring_weekly";
+    targetDates?: string[];
+    weekdays?: number[];
+    startDate?: string;
+    endDate?: string;
+    newStartTime: string;
+    newEndTime: string;
+    slotDuration?: number;
+    capacity?: number;
+    isWave?: boolean;
+  }) => {
+    return localDb.modifyDoctorScheduleElastic(params);
+  },
 
-        return mapped;
-      }
-    }
-    return localDb.getDoctorAvailability(doctorId, date, onlyAvailable);
+  previewDoctorScheduleElasticChanges: async (params: {
+    doctorId: number;
+    availabilityId?: number;
+    scheduleType?: "specific_dates" | "recurring_weekly";
+    targetDates?: string[];
+    weekdays?: number[];
+    startDate?: string;
+    endDate?: string;
+    newStartTime: string;
+    newEndTime: string;
+    slotDuration?: number;
+    capacity?: number;
+    isWave?: boolean;
+  }) => {
+    return localDb.previewDoctorScheduleElasticChanges(params);
+  },
+
+  getAppointmentsRequiringReview: async (doctorId: number) => {
+    return localDb.getAppointmentsRequiringReview(doctorId);
   },
 
   getAvailabilityById: async (
@@ -885,6 +911,9 @@ export const db = {
     doctorId: number;
     availabilityId: number;
     reason: string;
+    slotTime?: string;
+    bookedByUserId?: number;
+    bookedByRole?: UserRole;
   }): Promise<Appointment> => {
     if (isNeonConfigured) {
       const neonDb = getNeonDb();
@@ -903,12 +932,33 @@ export const db = {
         if (slot.doctor_id !== params.doctorId) {
           throw new Error("Slot does not belong to the selected doctor.");
         }
+
+        if (slot.is_blocked) {
+          throw new Error(
+            `This schedule is unavailable: ${slot.block_reason || "The doctor has blocked this date/window."}`
+          );
+        }
+
         if (isSlotInPast(slot.available_date, slot.start_time)) {
           throw new Error("Cannot book an appointment for a past date or time.");
         }
 
+        const doctor = await db.getDoctorById(params.doctorId);
+        if (!doctor) throw new Error("Doctor record not found.");
+
+        if (params.bookedByRole === "receptionist") {
+          if (!params.bookedByUserId) {
+            throw new Error("Receptionist user ID is required when booking as receptionist.");
+          }
+          const receptionist = await db.getReceptionistByUserId(params.bookedByUserId);
+          if (!receptionist || receptionist.clinic_id !== doctor.clinic_id) {
+            throw new Error("Unauthorized: Receptionists can only book appointments for doctors within their assigned clinic.");
+          }
+        }
+
         let waveNum: number | null = null;
         let estConsult: string | null = null;
+        let targetStartTime = slot.start_time;
 
         if (slot.is_wave) {
           const cap = slot.wave_capacity || 3;
@@ -933,32 +983,80 @@ export const db = {
               ...(nextCount >= cap ? { is_available: false } : {}),
             })
             .where(eq(schema.availability.availability_id, params.availabilityId));
+
+          if (slot.parent_availability_id) {
+            const parent = await neonDb
+              .select()
+              .from(schema.availability)
+              .where(eq(schema.availability.availability_id, slot.parent_availability_id))
+              .limit(1);
+            if (parent.length > 0) {
+              await neonDb
+                .update(schema.availability)
+                .set({
+                  wave_booked_count: (parent[0].wave_booked_count || 0) + 1,
+                })
+                .where(eq(schema.availability.availability_id, slot.parent_availability_id));
+            }
+          }
         } else {
-          const cap = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : 1;
-          const currentBooked = slot.wave_booked_count || 0;
-          if (currentBooked >= cap || !slot.is_available) {
+          // Stream mode
+          targetStartTime = params.slotTime || slot.start_time;
+          const validSlots = generateTimeSlots(slot.start_time, slot.end_time, slot.slot_duration);
+          if (validSlots.length === 0 || !validSlots.some((s) => s.startTime === targetStartTime)) {
             throw new Error(
-              "This time slot has already been booked by another patient. Please choose an alternative slot."
+              `Time slot ${targetStartTime} is unavailable or outside doctor's schedule hours.`
             );
           }
+          const cap = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : 1;
+
+          // Collision check for specific dynamic slot time
+          const existingCollisions = await neonDb
+            .select()
+            .from(schema.appointments)
+            .where(
+              and(
+                eq(schema.appointments.doctor_id, params.doctorId),
+                eq(schema.appointments.availability_id, params.availabilityId),
+                ne(schema.appointments.status, "cancelled"),
+                ne(schema.appointments.status, "rejected")
+              )
+            );
+          const collisionsAtTime = existingCollisions.filter(
+            (a) =>
+              a.estimated_consult_time === targetStartTime ||
+              (a.appointment_date && a.appointment_date.toISOString().includes(`T${targetStartTime}:`))
+          );
+          const subslotCount = generateTimeSlots(slot.start_time, slot.end_time, slot.slot_duration).length;
+          const slotTimeCapacity =
+            subslotCount > 0
+              ? Math.max(1, Math.floor((slot.wave_capacity || subslotCount) / subslotCount))
+              : 1;
+
+          if (collisionsAtTime.length >= slotTimeCapacity || !slot.is_available) {
+            throw new Error(
+              `Time slot ${targetStartTime} has already been booked by another patient. Please choose an alternative slot.`
+            );
+          }
+
+          const currentBooked = slot.wave_booked_count || 0;
           const nextCount = currentBooked + 1;
+          estConsult = targetStartTime;
+
+          const totalCapacity = slot.wave_capacity && slot.wave_capacity > 0 ? slot.wave_capacity : subslotCount;
+          const isFull = nextCount >= totalCapacity;
 
           await neonDb
             .update(schema.availability)
             .set({
               wave_booked_count: nextCount,
-              ...(nextCount >= cap ? { is_available: false } : {}),
+              ...(isFull ? { is_available: false } : {}),
             })
-            .where(
-              and(
-                eq(schema.availability.availability_id, params.availabilityId),
-                eq(schema.availability.is_available, true)
-              )
-            );
+            .where(eq(schema.availability.availability_id, params.availabilityId));
         }
 
         const appointmentDate = new Date(
-          `${slot.available_date}T${slot.start_time}:00Z`
+          `${slot.available_date}T${targetStartTime}:00Z`
         );
 
         const newAppResult = await neonDb
@@ -973,6 +1071,8 @@ export const db = {
             reason: params.reason,
             wave_number: waveNum,
             estimated_consult_time: estConsult,
+            booked_by_user_id: params.bookedByUserId || null,
+            booked_by_role: params.bookedByRole || null,
           })
           .returning();
 
@@ -987,6 +1087,7 @@ export const db = {
   rescheduleAppointmentAtomic: async (params: {
     appointmentId: number;
     newAvailabilityId: number;
+    newSlotTime?: string;
     reason?: string;
     requesterUserId: number;
     requesterRole: UserRole;
@@ -1007,6 +1108,12 @@ export const db = {
         if (params.requesterRole === "doctor" && doctor.user_id !== params.requesterUserId) {
           throw new Error("Unauthorized");
         }
+        if (params.requesterRole === "receptionist") {
+          const receptionist = await db.getReceptionistByUserId(params.requesterUserId);
+          if (!receptionist || receptionist.clinic_id !== doctor.clinic_id) {
+            throw new Error("Unauthorized: Receptionists can only reschedule appointments for doctors within their assigned clinic.");
+          }
+        }
 
         if (app.status !== "pending" && app.status !== "confirmed") {
           throw new Error(`Cannot reschedule an appointment in '${app.status}' status.`);
@@ -1016,6 +1123,11 @@ export const db = {
         if (!newSlot) throw new Error("Target availability slot does not exist.");
         if (newSlot.doctor_id !== app.doctor_id) {
           throw new Error("Rescheduling is only supported with the same practitioner.");
+        }
+        if (newSlot.is_blocked) {
+          throw new Error(
+            `Cannot reschedule to this slot: ${newSlot.block_reason || "The doctor has blocked this schedule."}`
+          );
         }
         if (isSlotInPast(newSlot.available_date, newSlot.start_time)) {
           throw new Error("Cannot reschedule an appointment to a past date or time.");
@@ -1029,37 +1141,107 @@ export const db = {
             .update(schema.availability)
             .set({ wave_booked_count: nextOldBooked, is_available: true })
             .where(eq(schema.availability.availability_id, oldSlot.availability_id));
+
+          if (oldSlot.parent_availability_id) {
+            const parent = await db.getAvailabilityById(oldSlot.parent_availability_id);
+            if (parent) {
+              const nextParentBooked = Math.max(0, (parent.wave_booked_count || 1) - 1);
+              await neonDb
+                .update(schema.availability)
+                .set({ wave_booked_count: nextParentBooked, is_available: true })
+                .where(eq(schema.availability.availability_id, parent.availability_id));
+            }
+          }
         }
 
         // Secure new slot
         let waveNum: number | null = null;
         let estConsult: string | null = null;
-
-        const cap = newSlot.wave_capacity || (newSlot.is_wave ? 3 : 1);
-        const currentNewBooked = newSlot.wave_booked_count || 0;
-        if (currentNewBooked >= cap || !newSlot.is_available) {
-          throw new Error(newSlot.is_wave ? "Wave window at full capacity." : "Requested time slot is already at full capacity.");
-        }
-        const nextCount = currentNewBooked + 1;
+        let newTargetStartTime = newSlot.start_time;
 
         if (newSlot.is_wave) {
+          const cap = newSlot.wave_capacity || 3;
+          const currentNewBooked = newSlot.wave_booked_count || 0;
+          if (currentNewBooked >= cap || !newSlot.is_available) {
+            throw new Error("Wave window at full capacity.");
+          }
+          const nextCount = currentNewBooked + 1;
           waveNum = nextCount;
           const [sh, sm] = newSlot.start_time.split(":").map(Number);
           const totalMinutes = sh * 60 + sm + (waveNum - 1) * 20;
           const eh = Math.floor(totalMinutes / 60) % 24;
           const em = totalMinutes % 60;
           estConsult = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+
+          await neonDb
+            .update(schema.availability)
+            .set({
+              wave_booked_count: nextCount,
+              ...(nextCount >= cap ? { is_available: false } : {}),
+            })
+            .where(eq(schema.availability.availability_id, newSlot.availability_id));
+
+          if (newSlot.parent_availability_id) {
+            const parent = await db.getAvailabilityById(newSlot.parent_availability_id);
+            if (parent) {
+              await neonDb
+                .update(schema.availability)
+                .set({
+                  wave_booked_count: (parent.wave_booked_count || 0) + 1,
+                })
+                .where(eq(schema.availability.availability_id, parent.availability_id));
+            }
+          }
+        } else {
+          // Stream Mode
+          newTargetStartTime = params.newSlotTime || newSlot.start_time;
+          const cap = newSlot.wave_capacity && newSlot.wave_capacity > 0 ? newSlot.wave_capacity : 1;
+
+          const existingCollisions = await neonDb
+            .select()
+            .from(schema.appointments)
+            .where(
+              and(
+                eq(schema.appointments.doctor_id, app.doctor_id),
+                eq(schema.appointments.availability_id, newSlot.availability_id),
+                ne(schema.appointments.status, "cancelled"),
+                ne(schema.appointments.status, "rejected")
+              )
+            );
+          const collisionsAtTime = existingCollisions.filter(
+            (a) =>
+              a.estimated_consult_time === newTargetStartTime ||
+              (a.appointment_date && a.appointment_date.toISOString().includes(`T${newTargetStartTime}:`))
+          );
+          const subslotCount = generateTimeSlots(newSlot.start_time, newSlot.end_time, newSlot.slot_duration).length;
+          const slotTimeCapacity =
+            subslotCount > 0
+              ? Math.max(1, Math.floor((newSlot.wave_capacity || subslotCount) / subslotCount))
+              : 1;
+
+          if (collisionsAtTime.length >= slotTimeCapacity || !newSlot.is_available) {
+            throw new Error(
+              `Time slot ${newTargetStartTime} has already been reserved. Please select another slot.`
+            );
+          }
+
+          const currentNewBooked = newSlot.wave_booked_count || 0;
+          const nextCount = currentNewBooked + 1;
+          estConsult = newTargetStartTime;
+
+          const totalCapacity = newSlot.wave_capacity && newSlot.wave_capacity > 0 ? newSlot.wave_capacity : subslotCount;
+          const isFull = nextCount >= totalCapacity;
+
+          await neonDb
+            .update(schema.availability)
+            .set({
+              wave_booked_count: nextCount,
+              ...(isFull ? { is_available: false } : {}),
+            })
+            .where(eq(schema.availability.availability_id, newSlot.availability_id));
         }
 
-        await neonDb
-          .update(schema.availability)
-          .set({
-            wave_booked_count: nextCount,
-            ...(nextCount >= cap ? { is_available: false } : {}),
-          })
-          .where(eq(schema.availability.availability_id, newSlot.availability_id));
-
-        const newDate = new Date(`${newSlot.available_date}T${newSlot.start_time}:00Z`);
+        const newDate = new Date(`${newSlot.available_date}T${newTargetStartTime}:00Z`);
         await neonDb
           .update(schema.appointments)
           .set({
@@ -1075,7 +1257,7 @@ export const db = {
         await db.createNotification({
           userId: patient.user_id,
           title: "Appointment Rescheduled",
-          message: `Your consultation with ${doctor.user?.full_name || "Dr. " + doctor.specialization} has been rescheduled to ${newSlot.available_date} at ${newSlot.start_time} IST.`,
+          message: `Your consultation with ${doctor.user?.full_name || "Dr. " + doctor.specialization} has been rescheduled to ${newSlot.available_date} at ${newTargetStartTime} IST.`,
           type: "rescheduled",
         });
 
@@ -1110,6 +1292,14 @@ export const db = {
         ) {
           throw new Error("Unauthorized");
         }
+        if (params.requesterRole === "receptionist") {
+          const receptionist = await db.getReceptionistByUserId(params.requesterUserId);
+          if (!receptionist || !app.doctor || receptionist.clinic_id !== app.doctor.clinic_id) {
+            throw new Error(
+              "Unauthorized: Receptionists can only modify appointments for doctors within their assigned clinic."
+            );
+          }
+        }
 
         await neonDb
           .update(schema.appointments)
@@ -1124,6 +1314,17 @@ export const db = {
               .update(schema.availability)
               .set({ wave_booked_count: nextBooked, is_available: true })
               .where(eq(schema.availability.availability_id, slot.availability_id));
+
+            if (slot.parent_availability_id) {
+              const parent = await db.getAvailabilityById(slot.parent_availability_id);
+              if (parent) {
+                const nextParentBooked = Math.max(0, (parent.wave_booked_count || 1) - 1);
+                await neonDb
+                  .update(schema.availability)
+                  .set({ wave_booked_count: nextParentBooked, is_available: true })
+                  .where(eq(schema.availability.availability_id, parent.availability_id));
+              }
+            }
           }
         }
 
@@ -3382,5 +3583,572 @@ export const db = {
       }
     }
     return localDb.resubscribeChannelByPhone(phone, channel);
+  },
+
+  // --- Clinics ---
+  getClinics: async (): Promise<Clinic[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select()
+            .from(schema.clinics)
+            .orderBy(asc(schema.clinics.clinic_id));
+          return rows.map((c) => ({
+            ...c,
+            created_at: c.created_at.toISOString(),
+          }));
+        } catch (err) {
+          console.warn("Neon getClinics failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getClinics();
+  },
+
+  getClinicById: async (clinicId: number): Promise<Clinic | null> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select()
+            .from(schema.clinics)
+            .where(eq(schema.clinics.clinic_id, clinicId))
+            .limit(1);
+          if (rows.length > 0) {
+            const c = rows[0];
+            return {
+              ...c,
+              created_at: c.created_at.toISOString(),
+            };
+          }
+          return null;
+        } catch (err) {
+          console.warn("Neon getClinicById failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getClinicById(clinicId) || null;
+  },
+
+  getDoctorsByClinic: async (clinicId: number): Promise<Doctor[]> => {
+    const all = await db.getDoctors();
+    return all.filter((d) => d.clinic_id === clinicId);
+  },
+
+  // --- Receptionists ---
+  getReceptionists: async (): Promise<Receptionist[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select({
+              receptionist: schema.receptionists,
+              user: {
+                full_name: schema.users.full_name,
+                email: schema.users.email,
+                phone: schema.users.phone,
+              },
+              clinic: schema.clinics,
+            })
+            .from(schema.receptionists)
+            .innerJoin(schema.users, eq(schema.receptionists.user_id, schema.users.user_id))
+            .leftJoin(schema.clinics, eq(schema.receptionists.clinic_id, schema.clinics.clinic_id));
+
+          return rows.map(({ receptionist, user, clinic }) => ({
+            ...receptionist,
+            created_at: receptionist.created_at.toISOString(),
+            user,
+            clinic: clinic
+              ? {
+                  ...clinic,
+                  created_at: clinic.created_at.toISOString(),
+                }
+              : undefined,
+          }));
+        } catch (err) {
+          console.warn("Neon getReceptionists failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getReceptionists();
+  },
+
+  getReceptionistById: async (receptionistId: number): Promise<Receptionist | null> => {
+    const all = await db.getReceptionists();
+    return all.find((r) => r.receptionist_id === receptionistId) || null;
+  },
+
+  getReceptionistByUserId: async (userId: number): Promise<Receptionist | null> => {
+    const all = await db.getReceptionists();
+    return all.find((r) => r.user_id === userId) || null;
+  },
+
+  createReceptionist: async (userId: number, clinicId: number): Promise<Receptionist> => {
+    localDb.createReceptionist(userId, clinicId);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const existing = await neonDb
+            .select()
+            .from(schema.receptionists)
+            .where(eq(schema.receptionists.user_id, userId))
+            .limit(1);
+
+          if (existing.length > 0) {
+            await neonDb
+              .update(schema.receptionists)
+              .set({ clinic_id: clinicId })
+              .where(eq(schema.receptionists.user_id, userId));
+          } else {
+            await neonDb.insert(schema.receptionists).values({
+              user_id: userId,
+              clinic_id: clinicId,
+            });
+          }
+          const created = await db.getReceptionistByUserId(userId);
+          if (created) return created;
+        } catch (err) {
+          console.warn("Neon createReceptionist failed, used localDb:", err);
+        }
+      }
+    }
+    return localDb.getReceptionistByUserId(userId)!;
+  },
+
+  updateReceptionistClinic: async (receptionistId: number, clinicId: number): Promise<Receptionist> => {
+    const updatedLocal = localDb.updateReceptionistClinic(receptionistId, clinicId);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          await neonDb
+            .update(schema.receptionists)
+            .set({ clinic_id: clinicId })
+            .where(eq(schema.receptionists.receptionist_id, receptionistId));
+          const updated = await db.getReceptionistById(receptionistId);
+          if (updated) return updated;
+        } catch (err) {
+          console.warn("Neon updateReceptionistClinic failed, used localDb:", err);
+        }
+      }
+    }
+    return updatedLocal;
+  },
+
+  getAppointmentsByClinic: async (clinicId: number): Promise<Appointment[]> => {
+    const doctors = await db.getDoctorsByClinic(clinicId);
+    const doctorIds = doctors.map((d) => d.doctor_id);
+    if (doctorIds.length === 0) return [];
+
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select()
+            .from(schema.appointments)
+            .where(inArray(schema.appointments.doctor_id, doctorIds))
+            .orderBy(desc(schema.appointments.appointment_date));
+
+          const result: Appointment[] = [];
+          for (const r of rows) {
+            const app = await db.getAppointmentById(r.appointment_id);
+            if (app) result.push(app);
+          }
+          return result;
+        } catch (err) {
+          console.warn("Neon getAppointmentsByClinic failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getAppointmentsByClinic(clinicId);
+  },
+
+  getPatients: async (searchQuery?: string): Promise<Patient[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select({
+              patient: schema.patients,
+              user: {
+                full_name: schema.users.full_name,
+                email: schema.users.email,
+                phone: schema.users.phone,
+              },
+            })
+            .from(schema.patients)
+            .innerJoin(schema.users, eq(schema.patients.user_id, schema.users.user_id));
+
+          const mapped = rows.map(({ patient, user }) => ({
+            ...patient,
+            created_at: patient.created_at.toISOString(),
+            user,
+          }));
+
+          if (!searchQuery || !searchQuery.trim()) return mapped;
+          const q = searchQuery.toLowerCase().trim();
+          return mapped.filter(
+            (p) =>
+              p.user?.full_name?.toLowerCase().includes(q) ||
+              p.user?.phone?.toLowerCase().includes(q) ||
+              p.user?.email?.toLowerCase().includes(q)
+          );
+        } catch (err) {
+          console.warn("Neon getPatients failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getPatients(searchQuery);
+  },
+
+  // --- Receptionist Invitations ---
+  createReceptionistInvitation: async (params: {
+    clinicId: number;
+    email: string;
+    invitedByUserId: number;
+  }): Promise<{ invitation: ReceptionistInvitation; rawToken: string }> => {
+    const localRes = localDb.createReceptionistInvitation(params);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const clinic = await db.getClinicById(params.clinicId);
+          if (!clinic) throw new Error("Clinic not found.");
+
+          const rawToken = crypto.randomBytes(32).toString("hex");
+          const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+          const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+          const inserted = await neonDb
+            .insert(schema.receptionistInvitations)
+            .values({
+              clinic_id: params.clinicId,
+              email: params.email.toLowerCase().trim(),
+              token_hash: tokenHash,
+              status: "pending",
+              expires_at: expiresAt,
+              created_by_user_id: params.invitedByUserId,
+            })
+            .returning();
+
+          const r = inserted[0];
+          return {
+            invitation: {
+              ...r,
+              status: r.status as InvitationStatus,
+              expires_at: r.expires_at.toISOString(),
+              accepted_at: r.accepted_at ? r.accepted_at.toISOString() : undefined,
+              created_at: r.created_at.toISOString(),
+              clinic,
+            },
+            rawToken,
+          };
+        } catch (err) {
+          console.warn("Neon createReceptionistInvitation failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localRes;
+  },
+
+  getReceptionistInvitations: async (clinicId?: number): Promise<ReceptionistInvitation[]> => {
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select({
+              invitation: schema.receptionistInvitations,
+              clinic: schema.clinics,
+            })
+            .from(schema.receptionistInvitations)
+            .leftJoin(
+              schema.clinics,
+              eq(schema.receptionistInvitations.clinic_id, schema.clinics.clinic_id)
+            )
+            .where(clinicId ? eq(schema.receptionistInvitations.clinic_id, clinicId) : undefined)
+            .orderBy(desc(schema.receptionistInvitations.created_at));
+
+          const now = new Date();
+          return rows.map(({ invitation, clinic }) => {
+            let status = invitation.status as InvitationStatus;
+            if (status === "pending" && invitation.expires_at < now) {
+              status = "expired";
+            }
+            return {
+              ...invitation,
+              status,
+              expires_at: invitation.expires_at.toISOString(),
+              accepted_at: invitation.accepted_at ? invitation.accepted_at.toISOString() : undefined,
+              created_at: invitation.created_at.toISOString(),
+              clinic: clinic
+                ? {
+                    ...clinic,
+                    created_at: clinic.created_at.toISOString(),
+                  }
+                : undefined,
+            };
+          });
+        } catch (err) {
+          console.warn("Neon getReceptionistInvitations failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getReceptionistInvitations(clinicId);
+  },
+
+  getReceptionistInvitationByToken: async (rawToken: string): Promise<ReceptionistInvitation | null> => {
+    const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const rows = await neonDb
+            .select({
+              invitation: schema.receptionistInvitations,
+              clinic: schema.clinics,
+            })
+            .from(schema.receptionistInvitations)
+            .leftJoin(
+              schema.clinics,
+              eq(schema.receptionistInvitations.clinic_id, schema.clinics.clinic_id)
+            )
+            .where(eq(schema.receptionistInvitations.token_hash, tokenHash))
+            .limit(1);
+
+          if (rows.length > 0) {
+            const { invitation, clinic } = rows[0];
+            const now = new Date();
+            if (invitation.status === "pending" && invitation.expires_at < now) {
+              await neonDb
+                .update(schema.receptionistInvitations)
+                .set({ status: "expired" })
+                .where(eq(schema.receptionistInvitations.invitation_id, invitation.invitation_id));
+              return null;
+            }
+            if (invitation.status !== "pending") return null;
+
+            return {
+              ...invitation,
+              status: invitation.status as InvitationStatus,
+              expires_at: invitation.expires_at.toISOString(),
+              accepted_at: invitation.accepted_at ? invitation.accepted_at.toISOString() : undefined,
+              created_at: invitation.created_at.toISOString(),
+              clinic: clinic
+                ? {
+                    ...clinic,
+                    created_at: clinic.created_at.toISOString(),
+                  }
+                : undefined,
+            };
+          }
+          return null;
+        } catch (err) {
+          console.warn("Neon getReceptionistInvitationByToken failed, falling back to localDb:", err);
+        }
+      }
+    }
+    return localDb.getReceptionistInvitationByToken(rawToken) || null;
+  },
+
+  revokeReceptionistInvitation: async (invitationId: number): Promise<ReceptionistInvitation> => {
+    const localRes = localDb.revokeReceptionistInvitation(invitationId);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          await neonDb
+            .update(schema.receptionistInvitations)
+            .set({ status: "revoked" })
+            .where(eq(schema.receptionistInvitations.invitation_id, invitationId));
+        } catch (err) {
+          console.warn("Neon revokeReceptionistInvitation failed, used localDb:", err);
+        }
+      }
+    }
+    return localRes;
+  },
+
+  acceptReceptionistInvitation: async (params: {
+    rawToken: string;
+    fullName: string;
+    phone: string;
+    passwordHash: string;
+  }): Promise<{ user: User; receptionist: Receptionist }> => {
+    const localRes = localDb.acceptReceptionistInvitation(params);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const inv = await db.getReceptionistInvitationByToken(params.rawToken);
+          if (inv) {
+            let user = await db.getUserByEmail(inv.email);
+            if (!user) {
+              user = await db.createUser(
+                params.fullName,
+                inv.email,
+                params.phone,
+                params.passwordHash,
+                "receptionist"
+              );
+            } else {
+              await neonDb
+                .update(schema.users)
+                .set({
+                  role: "receptionist",
+                  full_name: params.fullName.trim(),
+                  phone: params.phone.trim(),
+                  password_hash: params.passwordHash,
+                })
+                .where(eq(schema.users.user_id, user.user_id));
+            }
+
+            const rec = await db.createReceptionist(user.user_id, inv.clinic_id);
+            await neonDb
+              .update(schema.receptionistInvitations)
+              .set({ status: "accepted", accepted_at: new Date() })
+              .where(eq(schema.receptionistInvitations.invitation_id, inv.invitation_id));
+
+            return { user, receptionist: rec };
+          }
+        } catch (err) {
+          console.warn("Neon acceptReceptionistInvitation failed, used localDb:", err);
+        }
+      }
+    }
+    return localRes;
+  },
+
+  // --- Schedule Blocking ---
+  blockDoctorDate: async (params: {
+    doctorId: number;
+    date: string;
+    reason?: string;
+  }): Promise<{ blockedSlots: Availability[]; createdOverride: boolean }> => {
+    // Check for active booked appointments first
+    const localRes = localDb.blockDoctorDate(params);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const activeAppointments = await neonDb
+            .select()
+            .from(schema.appointments)
+            .where(
+              and(
+                eq(schema.appointments.doctor_id, params.doctorId),
+                ne(schema.appointments.status, "cancelled"),
+                ne(schema.appointments.status, "rejected")
+              )
+            );
+
+          const conflict = activeAppointments.filter(
+            (a) => a.appointment_date && a.appointment_date.toISOString().startsWith(params.date)
+          );
+
+          if (conflict.length > 0) {
+            throw new Error(
+              `Cannot block ${params.date}: There are ${conflict.length} active booked appointment(s). Please reschedule or cancel them first.`
+            );
+          }
+
+          const existingSlots = await neonDb
+            .select()
+            .from(schema.availability)
+            .where(
+              and(
+                eq(schema.availability.doctor_id, params.doctorId),
+                eq(schema.availability.available_date, params.date)
+              )
+            );
+
+          const blockReason = params.reason?.trim() || "Doctor unavailable / Leave";
+
+          if (existingSlots.length > 0) {
+            await neonDb
+              .update(schema.availability)
+              .set({
+                is_blocked: true,
+                is_available: false,
+                block_reason: blockReason,
+              })
+              .where(
+                and(
+                  eq(schema.availability.doctor_id, params.doctorId),
+                  eq(schema.availability.available_date, params.date)
+                )
+              );
+          } else {
+            await neonDb.insert(schema.availability).values({
+              doctor_id: params.doctorId,
+              available_date: params.date,
+              start_time: "09:00",
+              end_time: "17:00",
+              slot_duration: 30,
+              is_available: false,
+              is_wave: false,
+              wave_capacity: 0,
+              wave_booked_count: 0,
+              is_blocked: true,
+              block_reason: blockReason,
+            });
+          }
+        } catch (err) {
+          console.warn("Neon blockDoctorDate failed, used localDb:", err);
+        }
+      }
+    }
+    return localRes;
+  },
+
+  unblockDoctorDate: async (params: {
+    doctorId: number;
+    date: string;
+  }): Promise<{ unblockedSlots: Availability[] }> => {
+    const localRes = localDb.unblockDoctorDate(params);
+    if (isNeonConfigured) {
+      const neonDb = getNeonDb();
+      if (neonDb) {
+        try {
+          const slots = await neonDb
+            .select()
+            .from(schema.availability)
+            .where(
+              and(
+                eq(schema.availability.doctor_id, params.doctorId),
+                eq(schema.availability.available_date, params.date),
+                eq(schema.availability.is_blocked, true)
+              )
+            );
+
+          for (const s of slots) {
+            if (s.wave_capacity === 0 && s.start_time === "09:00" && s.end_time === "17:00") {
+              await neonDb
+                .delete(schema.availability)
+                .where(eq(schema.availability.availability_id, s.availability_id));
+            } else {
+              await neonDb
+                .update(schema.availability)
+                .set({
+                  is_blocked: false,
+                  block_reason: null,
+                  is_available: true,
+                })
+                .where(eq(schema.availability.availability_id, s.availability_id));
+            }
+          }
+        } catch (err) {
+          console.warn("Neon unblockDoctorDate failed, used localDb:", err);
+        }
+      }
+    }
+    return localRes;
   },
 };
