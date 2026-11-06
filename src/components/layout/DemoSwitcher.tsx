@@ -24,7 +24,9 @@ export function DemoSwitcher() {
         if (res.data.role === "doctor") {
           router.push("/doctor/dashboard");
         } else if (res.data.role === "admin") {
-          router.push("/reception/dashboard");
+          router.push("/admin/dashboard");
+        } else if (res.data.role === "receptionist") {
+          router.push("/reception/workspace");
         } else {
           router.push("/patient/dashboard");
         }
@@ -68,22 +70,43 @@ export function DemoSwitcher() {
             </div>
 
             <div className="space-y-2.5">
-              {/* Reception Staff */}
-              <div>
+              {/* Reception & Admin Staff */}
+              <div className="space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-forest flex items-center gap-1 px-1 mb-1">
-                  <Building2 className="w-3 h-3 text-forest" /> Clinic Front Desk
+                  <Building2 className="w-3 h-3 text-forest" /> Clinic Staff & Admin
                 </div>
                 <button
                   disabled={loadingEmail !== null}
-                  onClick={() => handleQuickLogin("admin@demo.com")}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-ivory border border-transparent hover:border-warm-border transition-all group"
+                  onClick={() => handleQuickLogin("receptionist@demo.com")}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-ivory border border-transparent hover:border-warm-border transition-all group cursor-pointer"
                 >
                   <div>
                     <div className="font-semibold text-ink group-hover:text-forest">
-                      Sunita Deshpande (Receptionist)
+                      Pooja Kulkarni (Receptionist)
                     </div>
                     <div className="text-[10px] text-ink-muted">
-                      admin@demo.com • Walk-in Queue & Cascade
+                      receptionist@demo.com • Apex Heart Clinic (Clinic 1)
+                    </div>
+                  </div>
+                  {loadingEmail === "receptionist@demo.com" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-forest" />
+                  ) : (
+                    <span className="text-[10px] text-forest font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                      Enter →
+                    </span>
+                  )}
+                </button>
+                <button
+                  disabled={loadingEmail !== null}
+                  onClick={() => handleQuickLogin("admin@demo.com")}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left text-xs hover:bg-ivory border border-transparent hover:border-warm-border transition-all group cursor-pointer"
+                >
+                  <div>
+                    <div className="font-semibold text-ink group-hover:text-forest">
+                      Sunita Deshpande (Clinic Admin)
+                    </div>
+                    <div className="text-[10px] text-ink-muted">
+                      admin@demo.com • Manage Clinics & Staff
                     </div>
                   </div>
                   {loadingEmail === "admin@demo.com" ? (

@@ -6,6 +6,10 @@ import {
   createDoctorScheduleAction,
   deleteDoctorAvailabilityAction,
   updateDoctorSchedulingPolicyAction,
+  blockDoctorAvailabilityAction,
+  unblockDoctorAvailabilityAction,
+  modifyDoctorAvailabilityWindowElasticAction,
+  previewDoctorScheduleElasticAction,
 } from "@/app/actions/doctor.actions";
 import {
   generateTimeSlots,
@@ -26,6 +30,11 @@ import {
   CalendarRange,
   X,
   Sparkles,
+  Ban,
+  Unlock,
+  ShieldAlert,
+  Sliders,
+  AlertTriangle,
 } from "lucide-react";
 import {
   getTodayIST,
@@ -91,6 +100,190 @@ export function DoctorAvailabilityManager({
   const [capacity, setCapacity] = useState<number>(
     doctor?.scheduling_mode === "wave" ? doctor?.wave_capacity || 3 : 1
   );
+  const [isOverride, setIsOverride] = useState(false);
+
+  // Schedule Blocking state
+  const [blockDate, setBlockDate] = useState<string>(minDate);
+  const [blockReason, setBlockReason] = useState<string>("");
+  const [isBlocking, setIsBlocking] = useState(false);
+  const [unblockingDate, setUnblockingDate] = useState<string | null>(null);
+
+  // Elastic Window Editing State
+  const [editingWindow, setEditingWindow] = useState<Availability | null>(null);
+  const [editStartTime, setEditStartTime] = useState<string>("09:00");
+  const [editEndTime, setEditEndTime] = useState<string>("17:00");
+  const [editDuration, setEditDuration] = useState<number>(30);
+  const [editCapacity, setEditCapacity] = useState<number>(1);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editPreviewLoading, setEditPreviewLoading] = useState(false);
+  const [editPreviewData, setEditPreviewData] = useState<{
+    addedSlots: Array<{ date: string; time: string }>;
+    removedSlots: Array<{ date: string; time: string }>;
+    preservedSlotsCount: number;
+    conflictingAppointments: Array<{
+      appointmentId: number;
+      patientName: string;
+      patientPhone?: string;
+      date: string;
+      time: string;
+      reason: string;
+      status: string;
+    }>;
+    hasConflicts: boolean;
+  } | null>(null);
+
+  const fetchEditPreview = async (
+    availId: number,
+    start: string,
+    end: string,
+    dur: number,
+    cap: number,
+    isWave: boolean
+  ) => {
+    if (start >= end) {
+      setEditPreviewData(null);
+      return;
+    }
+    setEditPreviewLoading(true);
+    const res = await previewDoctorScheduleElasticAction({
+      availabilityId: availId,
+      newStartTime: start,
+      newEndTime: end,
+      slotDuration: dur,
+      capacity: cap,
+      isWave,
+    });
+    setEditPreviewLoading(false);
+    if (res.success && res.data) {
+      setEditPreviewData(res.data);
+    }
+  };
+
+  const handleStartEditWindow = (slot: Availability) => {
+    setEditingWindow(slot);
+    setEditStartTime(slot.start_time.slice(0, 5));
+    setEditEndTime(slot.end_time.slice(0, 5));
+    setEditDuration(slot.slot_duration);
+    setEditCapacity(slot.wave_capacity || (slot.is_wave ? 3 : 1));
+    setEditPreviewData(null);
+    fetchEditPreview(
+      slot.availability_id,
+      slot.start_time.slice(0, 5),
+      slot.end_time.slice(0, 5),
+      slot.slot_duration,
+      slot.wave_capacity || (slot.is_wave ? 3 : 1),
+      Boolean(slot.is_wave)
+    );
+  };
+
+  const handleSaveEditWindow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWindow) return;
+    setIsSavingEdit(true);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+
+    const formData = new FormData();
+    formData.append("availability_id", String(editingWindow.availability_id));
+    formData.append("new_start_time", editStartTime);
+    formData.append("new_end_time", editEndTime);
+    formData.append("slot_duration", String(editDuration));
+    formData.append("capacity", String(editCapacity));
+
+    const res = await modifyDoctorAvailabilityWindowElasticAction(null, formData);
+    setIsSavingEdit(false);
+
+    if (res.success) {
+      setSuccessMessage(res.message || "Schedule window elastically updated.");
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.availability_id === editingWindow.availability_id
+            ? {
+                ...s,
+                start_time: editStartTime,
+                end_time: editEndTime,
+                slot_duration: editDuration,
+                wave_capacity: editCapacity,
+              }
+            : s
+        )
+      );
+      setEditingWindow(null);
+    } else {
+      setErrorMessage(res.error || "Failed to update availability window.");
+    }
+  };
+
+  const handleBlockDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsBlocking(true);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+
+    const formData = new FormData();
+    formData.append("date", blockDate);
+    if (blockReason) formData.append("reason", blockReason);
+
+    const res = await blockDoctorAvailabilityAction(null, formData);
+    setIsBlocking(false);
+    if (res.success) {
+      setSuccessMessage(res.message || `Date ${blockDate} successfully blocked.`);
+      setSlots((prev) => {
+        const dateSlots = prev.filter((s) => s.available_date === blockDate);
+        if (dateSlots.length > 0) {
+          return prev.map((s) =>
+            s.available_date === blockDate
+              ? { ...s, is_blocked: true, is_available: false, block_reason: blockReason || "Doctor unavailable / Leave" }
+              : s
+          );
+        } else {
+          return [
+            ...prev,
+            {
+              availability_id: Date.now(),
+              doctor_id: doctor?.doctor_id || 1,
+              available_date: blockDate,
+              start_time: "09:00",
+              end_time: "17:00",
+              slot_duration: 30,
+              is_available: false,
+              is_wave: false,
+              wave_capacity: 0,
+              wave_booked_count: 0,
+              is_blocked: true,
+              block_reason: blockReason || "Doctor unavailable / Leave",
+            },
+          ];
+        }
+      });
+      setBlockReason("");
+    } else {
+      setErrorMessage(res.error || "Failed to block schedule date.");
+    }
+  };
+
+  const handleUnblockDate = async (dateToUnblock: string) => {
+    setUnblockingDate(dateToUnblock);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+
+    const res = await unblockDoctorAvailabilityAction(dateToUnblock);
+    setUnblockingDate(null);
+    if (res.success) {
+      setSuccessMessage(res.message || `Date ${dateToUnblock} successfully unblocked.`);
+      setSlots((prev) =>
+        prev
+          .filter((s) => !(s.available_date === dateToUnblock && s.wave_capacity === 0 && s.is_blocked))
+          .map((s) =>
+            s.available_date === dateToUnblock
+              ? { ...s, is_blocked: false, block_reason: null, is_available: true }
+              : s
+          )
+      );
+    } else {
+      setErrorMessage(res.error || "Failed to unblock schedule date.");
+    }
+  };
 
   const handlePolicyChange = async (mode: "stream" | "wave") => {
     setIsUpdatingPolicy(true);
@@ -112,11 +305,28 @@ export function DoctorAvailabilityManager({
     setIsUpdatingPolicy(false);
   };
 
-  // Group slots by date
+  // Group slots by date (display top-level parent windows with nested subslots)
   const groupedSlots = useMemo(() => {
-    return slots.reduce<Record<string, Availability[]>>((acc, slot) => {
+    const topLevel = slots.filter((s) => !s.parent_availability_id);
+    const childSubslots = slots.filter((s) => Boolean(s.parent_availability_id));
+
+    return topLevel.reduce<Record<string, Availability[]>>((acc, slot) => {
       acc[slot.available_date] = acc[slot.available_date] || [];
-      acc[slot.available_date].push(slot);
+
+      if (slot.is_wave) {
+        const subslots =
+          slot.subslots && slot.subslots.length > 0
+            ? slot.subslots
+            : childSubslots.filter(
+                (c) => c.parent_availability_id === slot.availability_id
+              );
+        acc[slot.available_date].push({
+          ...slot,
+          subslots,
+        });
+      } else {
+        acc[slot.available_date].push(slot);
+      }
       return acc;
     }, {});
   }, [slots]);
@@ -205,6 +415,7 @@ export function DoctorAvailabilityManager({
     formData.append("end_time", endTime);
     formData.append("slot_duration", slotDuration.toString());
     formData.append("capacity", capacity.toString());
+    formData.append("is_override", isOverride.toString());
 
     if (scheduleType === "recurring_weekly") {
       formData.append("start_date", startDate);
@@ -684,6 +895,26 @@ export function DoctorAvailabilityManager({
               )}
             </div>
 
+            {/* Override Option */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isOverride}
+                  onChange={(e) => setIsOverride(e.target.checked)}
+                  className="mt-0.5 rounded border-warm-border text-forest focus:ring-forest cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-xs text-ink block">
+                    Override existing schedule for selected date(s)
+                  </span>
+                  <span className="text-[10px] text-ink-muted block mt-0.5 leading-relaxed">
+                    Safely replaces unbooked availability windows on these dates. Existing booked appointments are strictly preserved.
+                  </span>
+                </div>
+              </label>
+            </div>
+
             <button
               type="submit"
               disabled={loading || totalSlotsCount === 0 || Boolean(previewError)}
@@ -704,6 +935,69 @@ export function DoctorAvailabilityManager({
               )}
             </button>
           </form>
+
+          {/* Schedule Blocking & Leave Manager */}
+          <div className="pt-5 border-t border-warm-border space-y-3.5">
+            <div className="flex items-center gap-2">
+              <Ban className="w-4 h-4 text-terracotta" />
+              <div>
+                <h4 className="font-serif text-base font-medium text-ink">
+                  Schedule Blocking & Leave
+                </h4>
+                <p className="text-[11px] text-muted-text">
+                  Block dates to mark as unavailable and prevent bookings.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleBlockDate} className="space-y-3 text-xs">
+              <div>
+                <label className="font-semibold text-ink block mb-1">
+                  Date to Block *
+                </label>
+                <input
+                  type="date"
+                  min={minDate}
+                  required
+                  value={blockDate}
+                  onChange={(e) => setBlockDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-warm-border focus:outline-none focus:border-terracotta bg-ivory text-ink"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink block mb-1">
+                  Reason for Unavailability (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Annual Medical Leave, Conference"
+                  value={blockReason}
+                  onChange={(e) => setBlockReason(e.target.value)}
+                  maxLength={100}
+                  className="w-full px-3 py-2 rounded-xl border border-warm-border focus:outline-none focus:border-terracotta bg-ivory text-ink"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isBlocking}
+                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-terracotta hover:bg-terracotta/90 disabled:opacity-50 transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isBlocking ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Blocking Date...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Block Schedule Date</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* List: Existing Slots */}
@@ -736,81 +1030,219 @@ export function DoctorAvailabilityManager({
                 year: "numeric",
               });
 
+              const isDateBlocked = dateSlots.some((s) => s.is_blocked);
+              const blockReasonText = dateSlots.find((s) => s.is_blocked)?.block_reason;
+
               return (
                 <div
                   key={dateStr}
-                  className="clinic-card p-5 space-y-3.5"
+                  className={`clinic-card p-5 space-y-3.5 ${
+                    isDateBlocked ? "border-l-4 border-l-terracotta bg-terracotta/5" : ""
+                  }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-forest" />
                       <span className="font-serif text-sm font-medium text-ink">
                         {formattedDate}
                       </span>
+                      {isDateBlocked && (
+                        <span className="px-2 py-0.5 rounded-full bg-terracotta text-white font-bold text-[10px] uppercase tracking-wide flex items-center gap-1">
+                          <Ban className="w-3 h-3" />
+                          <span>Blocked</span>
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[11px] font-mono text-muted-text">
-                      {dateSlots.length} {dateSlots.length === 1 ? "slot" : "slots"}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {isDateBlocked ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUnblockDate(dateStr)}
+                          disabled={unblockingDate === dateStr}
+                          className="px-2.5 py-1 rounded-lg bg-ivory border border-terracotta/40 text-terracotta hover:bg-terracotta hover:text-white font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          {unblockingDate === dateStr ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Unlock className="w-3 h-3" />
+                          )}
+                          <span>Unblock Date</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] font-mono text-muted-text">
+                          {dateSlots.length} {dateSlots.length === 1 ? "slot" : "slots"}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {isDateBlocked && (
+                    <div className="p-3 bg-terracotta/15 border border-terracotta/30 rounded-xl flex items-center gap-2 text-xs text-ink">
+                      <ShieldAlert className="w-4 h-4 text-terracotta shrink-0" />
+                      <div>
+                        <span className="font-semibold text-terracotta">Blocked Schedule: </span>
+                        <span>{blockReasonText || "Doctor Unavailable / On Leave"}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
                     {dateSlots.map((slot) => {
-                      const isAvailable = slot.is_available;
                       const isDeleting = deletingId === slot.availability_id;
 
+                      if (slot.is_wave) {
+                        const subslots = slot.subslots || [];
+                        return (
+                          <div
+                            key={slot.availability_id}
+                            className="p-4 rounded-xl border border-warm-border bg-ivory space-y-3"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-forest text-ivory font-bold uppercase tracking-wider">
+                                  Wave Parent Window
+                                </span>
+                                <span className="font-semibold text-ink font-mono text-sm">
+                                  {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                                </span>
+                                <span className="text-xs text-ink-muted">
+                                  ({subslots.length} waves • {slot.wave_capacity || 3} patients/wave)
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-end sm:self-auto">
+                                <span className="text-xs font-semibold text-forest font-mono">
+                                  {slot.wave_booked_count || 0} Total Booked
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditWindow(slot)}
+                                  className="p-1.5 rounded-lg text-forest hover:bg-forest/15 transition-colors cursor-pointer"
+                                  title="Elastically edit window hours (shrink or expand)"
+                                >
+                                  <Sliders className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSlot(slot.availability_id)}
+                                  disabled={isDeleting}
+                                  className="p-1.5 rounded-lg text-muted-text hover:text-ink hover:bg-terracotta/20 transition-colors cursor-pointer"
+                                  title="Delete entire Wave window and subslots"
+                                >
+                                  {isDeleting ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Nested Subslots */}
+                            {subslots.length > 0 ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-warm-border/60">
+                                {subslots.map((sub, sIdx) => (
+                                  <div
+                                    key={sub.availability_id || sIdx}
+                                    className={`p-2.5 rounded-lg border text-xs flex flex-col gap-1 ${
+                                      sub.is_available
+                                        ? "bg-white border-warm-border"
+                                        : "bg-sage/20 border-forest/20"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between font-mono font-semibold text-[11px]">
+                                      <span>
+                                        {sub.start_time.slice(0, 5)} – {sub.end_time.slice(0, 5)}
+                                      </span>
+                                      <span className="text-[9px] px-1 py-0.2 bg-sage/60 text-forest rounded font-sans font-bold">
+                                        Wave {sIdx + 1}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px]">
+                                      <span className="text-muted-text">
+                                        Cap: {sub.wave_capacity || 3}
+                                      </span>
+                                      <span
+                                        className={
+                                          sub.is_available
+                                            ? "text-forest font-semibold"
+                                            : "text-terracotta font-bold"
+                                        }
+                                      >
+                                        {sub.wave_booked_count || 0}/{sub.wave_capacity || 3} ({sub.is_available ? "Open" : "Full"})
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+
+                      // Stream Continuous Window
+                      const dynamicSlots = generateTimeSlots(
+                        slot.start_time,
+                        slot.end_time,
+                        slot.slot_duration
+                      );
                       return (
                         <div
                           key={slot.availability_id}
-                          className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-colors ${
-                            isAvailable
-                              ? "bg-ivory border-warm-border hover:border-forest/40"
-                              : "bg-sage/20 border-forest/20"
-                          }`}
+                          className="p-4 rounded-xl border border-warm-border bg-ivory space-y-3"
                         >
-                          <div>
-                            <div className="font-semibold text-ink font-mono text-[11px] flex items-center gap-1.5">
-                              <span>
-                                {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-forest/15 text-forest font-bold uppercase tracking-wider">
+                                Continuous Stream Window
                               </span>
-                              {slot.is_wave && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-sage/60 text-forest font-sans font-bold uppercase">
-                                  Wave
-                                </span>
-                              )}
+                              <span className="font-semibold text-ink font-mono text-sm">
+                                {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                              </span>
+                              <span className="text-xs text-ink-muted">
+                                ({slot.slot_duration}m intervals • {dynamicSlots.length} dynamic slots)
+                              </span>
                             </div>
-                            <span
-                              className={`text-[10px] font-medium block ${
-                                isAvailable
-                                  ? "text-muted-text"
-                                  : "text-forest font-semibold"
-                              }`}
-                            >
-                              {slot.is_wave
-                                ? `${slot.wave_booked_count || 0}/${slot.wave_capacity || 3} booked (${isAvailable ? "Open" : "Full"})`
-                                : slot.wave_capacity && slot.wave_capacity > 1
-                                ? `${slot.wave_booked_count || 0}/${slot.wave_capacity} booked (${isAvailable ? "Open" : "Full"})`
-                                : isAvailable
-                                ? "Open for booking"
-                                : "Reserved"}
-                            </span>
+
+                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                              <span className="text-xs font-semibold text-forest font-mono">
+                                {slot.wave_booked_count || 0} Booked
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditWindow(slot)}
+                                className="p-1.5 rounded-lg text-forest hover:bg-forest/15 transition-colors cursor-pointer"
+                                title="Elastically edit window hours (shrink or expand)"
+                              >
+                                <Sliders className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSlot(slot.availability_id)}
+                                disabled={isDeleting}
+                                className="p-1.5 rounded-lg text-muted-text hover:text-ink hover:bg-terracotta/20 transition-colors cursor-pointer"
+                                title="Delete Stream Window"
+                              >
+                                {isDeleting ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
                           </div>
 
-                          {isAvailable && (
-                            <button
-                              onClick={() =>
-                                handleDeleteSlot(slot.availability_id)
-                              }
-                              disabled={isDeleting}
-                              className="p-1.5 rounded-lg text-muted-text hover:text-ink hover:bg-terracotta/20 transition-colors"
-                              title="Delete Slot"
-                            >
-                              {isDeleting ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          )}
+                          {/* Dynamic Slot Intervals Display */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-1.5 pt-2 border-t border-warm-border/60">
+                            {dynamicSlots.map((ds, dsIdx) => (
+                              <div
+                                key={dsIdx}
+                                className="p-1.5 rounded bg-white border border-warm-border text-center text-[11px] font-mono text-ink"
+                              >
+                                {ds.startTime}–{ds.endTime}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       );
                     })}
@@ -833,6 +1265,278 @@ export function DoctorAvailabilityManager({
         )}
       </div>
     </div>
+
+    {/* Elastic Schedule Window Modification Modal */}
+    {editingWindow && (
+      <div className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+        <div className="bg-ivory border border-warm-border rounded-2xl shadow-2xl max-w-xl w-full p-6 space-y-5 animate-in fade-in zoom-in-95 my-8">
+          <div className="flex items-center justify-between pb-3 border-b border-warm-border">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-forest/10 flex items-center justify-center text-forest">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-ink">
+                  Modify Working Hours (Elastic)
+                </h3>
+                <p className="text-xs text-muted-text">
+                  {formatISTDate(editingWindow.available_date, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })}{" "}
+                  • Current:{" "}
+                  <span className="font-mono font-semibold text-ink">
+                    {editingWindow.start_time.slice(0, 5)}–{editingWindow.end_time.slice(0, 5)}
+                  </span>{" "}
+                  ({editingWindow.is_wave ? "Wave Cohort" : "Stream"})
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditingWindow(null)}
+              className="p-1 rounded-lg text-muted-text hover:text-ink hover:bg-warm-border transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSaveEditWindow} className="space-y-4 text-xs">
+            {/* Start & End Times */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-semibold text-ink block mb-1">
+                  New Start Time *
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={editStartTime}
+                  onChange={(e) => {
+                    setEditStartTime(e.target.value);
+                    fetchEditPreview(
+                      editingWindow.availability_id,
+                      e.target.value,
+                      editEndTime,
+                      editDuration,
+                      editCapacity,
+                      Boolean(editingWindow.is_wave)
+                    );
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-warm-border bg-white text-ink font-mono focus:outline-none focus:border-forest"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-ink block mb-1">
+                  New End Time *
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={editEndTime}
+                  onChange={(e) => {
+                    setEditEndTime(e.target.value);
+                    fetchEditPreview(
+                      editingWindow.availability_id,
+                      editStartTime,
+                      e.target.value,
+                      editDuration,
+                      editCapacity,
+                      Boolean(editingWindow.is_wave)
+                    );
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-warm-border bg-white text-ink font-mono focus:outline-none focus:border-forest"
+                />
+              </div>
+            </div>
+
+            {/* Slot Duration & Wave Capacity */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-semibold text-ink block mb-1">
+                  Slot Duration
+                </label>
+                <select
+                  value={editDuration}
+                  onChange={(e) => {
+                    const dur = Number(e.target.value);
+                    setEditDuration(dur);
+                    fetchEditPreview(
+                      editingWindow.availability_id,
+                      editStartTime,
+                      editEndTime,
+                      dur,
+                      editCapacity,
+                      Boolean(editingWindow.is_wave)
+                    );
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-warm-border bg-white text-ink focus:outline-none focus:border-forest"
+                >
+                  <option value={15}>15 mins (Express)</option>
+                  <option value={30}>30 mins (Standard)</option>
+                  <option value={45}>45 mins (Comprehensive)</option>
+                  <option value={60}>60 mins (Extended / Wave)</option>
+                </select>
+              </div>
+              {editingWindow.is_wave && (
+                <div>
+                  <label className="font-semibold text-ink block mb-1">
+                    Patients Per Wave
+                  </label>
+                  <select
+                    value={editCapacity}
+                    onChange={(e) => {
+                      const cap = Number(e.target.value);
+                      setEditCapacity(cap);
+                      fetchEditPreview(
+                        editingWindow.availability_id,
+                        editStartTime,
+                        editEndTime,
+                        editDuration,
+                        cap,
+                        true
+                      );
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-warm-border bg-white text-ink focus:outline-none focus:border-forest font-semibold text-forest"
+                  >
+                    <option value={1}>1 patient / wave</option>
+                    <option value={2}>2 patients / wave</option>
+                    <option value={3}>3 patients / wave (Standard)</option>
+                    <option value={4}>4 patients / wave</option>
+                    <option value={5}>5 patients / wave</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Live Preview of Added & Removed Slots */}
+            <div className="p-3.5 bg-forest/5 border border-forest/20 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-forest flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Schedule Elastic Diff Preview</span>
+                </span>
+                {editPreviewLoading && (
+                  <span className="text-[10px] text-muted-text flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Calculating...
+                  </span>
+                )}
+              </div>
+
+              {editPreviewData && (
+                <div className="space-y-2">
+                  {/* Added Slots */}
+                  {editPreviewData.addedSlots.length > 0 && (
+                    <div>
+                      <span className="text-[11px] font-semibold text-forest block mb-1">
+                        + Newly Expanded Slots ({editPreviewData.addedSlots.length}):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {editPreviewData.addedSlots.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded bg-forest/15 text-forest font-mono text-[10px] font-semibold"
+                          >
+                            + {s.time}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Removed Unbooked Slots */}
+                  {editPreviewData.removedSlots.length > 0 && (
+                    <div>
+                      <span className="text-[11px] font-semibold text-terracotta block mb-1">
+                        - Shrunk / Removed Unbooked Slots ({editPreviewData.removedSlots.length}):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {editPreviewData.removedSlots.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded bg-terracotta/15 text-terracotta font-mono text-[10px] font-semibold"
+                          >
+                            - {s.time}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {editPreviewData.addedSlots.length === 0 &&
+                    editPreviewData.removedSlots.length === 0 && (
+                      <p className="text-[11px] text-ink-muted italic">
+                        No slot changes detected for this time range.
+                      </p>
+                    )}
+                </div>
+              )}
+            </div>
+
+            {/* Warning for Conflicting Booked Appointments Outside New Window */}
+            {editPreviewData?.hasConflicts && (
+              <div className="p-3.5 bg-amber-500/15 border border-amber-500/30 rounded-xl space-y-2 text-amber-950">
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>
+                    Attention: {editPreviewData.conflictingAppointments.length} existing booked appointment(s) fall outside your new hours!
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Medrella strictly preserves all existing bookings. These appointments will <strong>NOT</strong> be cancelled, deleted, or rescheduled automatically. They will be flagged in your Consultation Roster as requiring doctor review.
+                </p>
+                <div className="space-y-1.5 pt-1">
+                  {editPreviewData.conflictingAppointments.map((app) => (
+                    <div
+                      key={app.appointmentId}
+                      className="p-2 rounded bg-white/70 border border-amber-500/25 flex items-center justify-between text-[11px]"
+                    >
+                      <div>
+                        <span className="font-semibold text-ink">{app.patientName}</span>
+                        <span className="text-muted-text ml-1">({app.reason})</span>
+                      </div>
+                      <span className="font-mono font-bold text-amber-800">
+                        {app.time} IST
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-warm-border">
+              <button
+                type="button"
+                onClick={() => setEditingWindow(null)}
+                disabled={isSavingEdit}
+                className="px-4 py-2 rounded-xl border border-warm-border text-ink hover:bg-warm-border/50 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEdit || editStartTime >= editEndTime}
+                className="px-5 py-2 rounded-xl bg-forest hover:bg-forest/90 text-ivory font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isSavingEdit ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Confirm & Apply Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
   </div>
   );
 }

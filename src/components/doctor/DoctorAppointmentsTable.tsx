@@ -10,6 +10,7 @@ import {
   Phone,
   Search,
   Clock,
+  AlertCircle,
 } from "lucide-react";
 import { formatISTDate } from "@/lib/utils/date";
 import { RescheduleModal } from "@/components/appointments/RescheduleModal";
@@ -22,7 +23,7 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
   const [appointments, setAppointments] =
     useState<Appointment[]>(initialAppointments);
   const [activeTab, setActiveTab] = useState<
-    "all" | "pending" | "confirmed" | "completed" | "cancelled"
+    "all" | "pending" | "confirmed" | "completed" | "cancelled" | "review"
   >("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [reschedulingAppointment, setReschedulingAppointment] =
@@ -51,6 +52,9 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
       app.status !== "rejected"
     )
       return false;
+    if (activeTab === "review" && !app.is_outside_schedule && !app.requires_review) {
+      return false;
+    }
 
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase().trim();
@@ -130,6 +134,27 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
             }
             )
           </button>
+          {appointments.some((a) => a.is_outside_schedule || a.requires_review) && (
+            <button
+              onClick={() => setActiveTab("review")}
+              className={`px-3 py-1.5 rounded-md font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
+                activeTab === "review"
+                  ? "bg-amber-600 text-white border border-amber-600"
+                  : "text-amber-800 bg-amber-500/10 hover:bg-amber-500/20"
+              }`}
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+              <span>
+                Requires Attention (
+                {
+                  appointments.filter(
+                    (a) => a.is_outside_schedule || a.requires_review
+                  ).length
+                }
+                )
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Search */}
@@ -184,6 +209,12 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {app.is_outside_schedule && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px] flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 text-amber-700" />
+                        <span>Outside Hours</span>
+                      </span>
+                    )}
                     <AppointmentStatusBadge status={app.status} size="sm" />
                     <PaymentStatusBadge status={app.payment_status} size="sm" />
                     {(app.status === "pending" || app.status === "confirmed") && (
@@ -204,6 +235,18 @@ export function DoctorAppointmentsTable({ initialAppointments }: Props) {
                     />
                   </div>
                 </div>
+
+                {app.is_outside_schedule && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-amber-950">Schedule Adjustment Warning: </span>
+                      <span>
+                        {app.review_reason || "This appointment was scheduled outside your updated operating window. Patient booking is strictly preserved. Please review or reschedule if necessary."}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-warm-border-subtle text-xs">
                   <div className="flex items-center gap-2 text-ink font-semibold flex-wrap">
