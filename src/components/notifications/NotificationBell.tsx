@@ -18,7 +18,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import { InAppNotification, InAppNotificationCategory } from "@/types/database";
+import { InAppNotification, InAppNotificationCategory, UserRole } from "@/types/database";
 import {
   getMyNotificationsAction,
   markNotificationReadAction,
@@ -27,7 +27,7 @@ import {
 import { formatISTDateTime } from "@/lib/utils/date";
 
 interface NotificationBellProps {
-  sessionRole?: "patient" | "doctor" | "admin";
+  sessionRole?: UserRole;
   className?: string;
 }
 

@@ -18,6 +18,8 @@
  *      the captured payment amount.
  */
 
+import { UserRole } from "@/types/database";
+
 export interface RefundPolicyResult {
   eligibleAmount: number; // in minor units (paise)
   refundPercentage: number;
@@ -49,7 +51,7 @@ export function getRefundPolicyConfig() {
 export function calculateEligibleRefund(params: {
   appointmentDate: Date | string;
   cancellationDate?: Date | string;
-  cancelledByRole: "doctor" | "patient" | "admin";
+  cancelledByRole: UserRole;
   capturedAmount: number; // in minor units (paise)
   alreadyRefundedAmount?: number; // in minor units (paise)
   manualReason?: string;
@@ -69,8 +71,12 @@ export function calculateEligibleRefund(params: {
 
   const remainingMaxRefundable = Math.max(0, capturedAmount - alreadyRefundedAmount);
 
-  // 1. Doctor / Clinic initiated cancellation: Always 100% refund
-  if (cancelledByRole === "doctor" || cancelledByRole === "admin") {
+  // 1. Doctor / Clinic / Receptionist initiated cancellation: Always 100% refund
+  if (
+    cancelledByRole === "doctor" ||
+    cancelledByRole === "admin" ||
+    cancelledByRole === "receptionist"
+  ) {
     const refundAmount = Math.min(capturedAmount, remainingMaxRefundable);
     return {
       eligibleAmount: refundAmount,

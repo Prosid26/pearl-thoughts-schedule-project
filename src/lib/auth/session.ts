@@ -43,6 +43,8 @@ export async function getSession(): Promise<SessionUser | null> {
       role: payload.role as SessionUser["role"],
       patient_id: (payload.patient_id as number) ?? null,
       doctor_id: (payload.doctor_id as number) ?? null,
+      receptionist_id: (payload.receptionist_id as number) ?? null,
+      clinic_id: (payload.clinic_id as number) ?? null,
     };
   } catch {
     return null;
@@ -82,10 +84,20 @@ export async function requireDoctor(): Promise<
   return user as SessionUser & { doctor_id: number };
 }
 
+export async function requireReceptionist(): Promise<
+  SessionUser & { receptionist_id: number; clinic_id: number }
+> {
+  const user = await requireUser();
+  if (user.role !== "receptionist" || !user.receptionist_id || !user.clinic_id) {
+    throw new Error("Access Denied: Receptionist privileges and assigned clinic required.");
+  }
+  return user as SessionUser & { receptionist_id: number; clinic_id: number };
+}
+
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
   if (user.role !== "admin") {
-    throw new Error("Access Denied: Reception and staff privileges required.");
+    throw new Error("Access Denied: Admin privileges required.");
   }
   return user;
 }
