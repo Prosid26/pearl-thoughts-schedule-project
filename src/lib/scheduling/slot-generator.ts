@@ -156,3 +156,134 @@ export function resolveTargetDates(config: TargetDatesConfig): string[] {
   return Array.from(dateSet).sort();
 }
 
+/**
+ * Evaluates whether two time intervals overlap.
+ * Strictly applies the interval overlap condition:
+ * startA < endB AND endA > startB
+ * Consecutive touching intervals (e.g., 10:00–10:30 and 10:30–11:00) do NOT overlap.
+ */
+export function doIntervalsOverlap(
+  startA: string,
+  endA: string,
+  startB: string,
+  endB: string
+): boolean {
+  return startA < endB && endA > startB;
+}
+
+export interface DynamicStreamSlot {
+  startTime: string; // "HH:mm"
+  endTime: string;   // "HH:mm"
+  slotDuration: number; // minutes
+  isAvailable: boolean;
+  bookedCount: number;
+  capacity: number;
+}
+
+/**
+ * Dynamically calculates available appointment times from a continuous Stream window.
+ * Slices [start_time, end_time] into slot_duration increments and determines availability
+ * by matching active booked appointments for that time.
+ */
+export function calculateStreamAppointmentTimes(
+  window: {
+    start_time: string;
+    end_time: string;
+    slot_duration: number;
+    wave_capacity?: number;
+  },
+  activeBookings: Array<{
+    appointment_time?: string | null;
+    estimated_consult_time?: string | null;
+    appointment_date?: string | Date;
+  }> = []
+): DynamicStreamSlot[] {
+  const slots = generateTimeSlots(
+    window.start_time,
+    window.end_time,
+    window.slot_duration
+  );
+
+  // In Stream mode, individual slot capacity is computed from window capacity divided by subslot count
+  const subslotCount = slots.length;
+  const slotCapacity =
+    subslotCount > 0
+      ? Math.max(1, Math.floor((window.wave_capacity || subslotCount) / subslotCount))
+      : 1;
+
+  // Count active bookings by start time
+  const bookedCountsByTime = new Map<string, number>();
+  for (const b of activeBookings) {
+    let timeStr = b.appointment_time || b.estimated_consult_time;
+    if (!timeStr && b.appointment_date) {
+      const d =
+        typeof b.appointment_date === "string"
+          ? b.appointment_date
+          : b.appointment_date.toISOString();
+      const match = d.match(/T(\d{2}:\d{2})/);
+      if (match) timeStr = match[1];
+    }
+    if (timeStr) {
+      const cleanTime = timeStr.slice(0, 5);
+      bookedCountsByTime.set(cleanTime, (bookedCountsByTime.get(cleanTime) || 0) + 1);
+    }
+  }
+
+  return slots.map((s) => {
+    const booked = bookedCountsByTime.get(s.startTime) || 0;
+    return {
+      startTime: s.startTime,
+      endTime: s.endTime,
+      slotDuration: s.slotDuration,
+      isAvailable: booked < slotCapacity,
+      bookedCount: booked,
+      capacity: slotCapacity,
+    };
+  });
+}
+
+export interface ElasticDiffResult {
+  addedSlots: TimeSlot[];
+  removedSlots: TimeSlot[];
+  preservedSlots: TimeSlot[];
+  isShrinking: boolean;
+  isExpanding: boolean;
+  isShift: boolean;
+}
+
+/**
+ * Calculates deterministic slot differences when elastically expanding or shrinking a schedule window.
+ */
+export function calculateElasticDiff(
+  oldStartTime: string,
+  oldEndTime: string,
+  newStartTime: string,
+  newEndTime: string,
+  slotDuration: number
+): ElasticDiffResult {
+  const oldSlots = generateTimeSlots(oldStartTime, oldEndTime, slotDuration);
+  const newSlots = generateTimeSlots(newStartTime, newEndTime, slotDuration);
+
+  const oldSlotKeySet = new Set(oldSlots.map((s) => `${s.startTime}-${s.endTime}`));
+  const newSlotKeySet = new Set(newSlots.map((s) => `${s.startTime}-${s.endTime}`));
+
+  const addedSlots = newSlots.filter((s) => !oldSlotKeySet.has(`${s.startTime}-${s.endTime}`));
+  const removedSlots = oldSlots.filter((s) => !newSlotKeySet.has(`${s.startTime}-${s.endTime}`));
+  const preservedSlots = newSlots.filter((s) => oldSlotKeySet.has(`${s.startTime}-${s.endTime}`));
+
+  const isShrinking = newStartTime > oldStartTime || newEndTime < oldEndTime;
+  const isExpanding = newStartTime < oldStartTime || newEndTime > oldEndTime;
+  const isShift = newStartTime !== oldStartTime || newEndTime !== oldEndTime;
+
+  return {
+    addedSlots,
+    removedSlots,
+    preservedSlots,
+    isShrinking,
+    isExpanding,
+    isShift,
+  };
+}
+
+
+

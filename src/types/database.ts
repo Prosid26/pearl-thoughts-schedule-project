@@ -1,4 +1,4 @@
-export type UserRole = "patient" | "doctor" | "admin";
+export type UserRole = "patient" | "doctor" | "admin" | "receptionist";
 
 export type AppointmentStatus =
   | "pending"
@@ -17,6 +17,38 @@ export interface User {
   created_at: string;
 }
 
+export interface Clinic {
+  clinic_id: number;
+  name: string;
+  address: string;
+  phone: string;
+  created_at: string;
+}
+
+export interface Receptionist {
+  receptionist_id: number;
+  user_id: number;
+  clinic_id: number;
+  created_at: string;
+  user?: Pick<User, "full_name" | "email" | "phone">;
+  clinic?: Clinic;
+}
+
+export type InvitationStatus = "pending" | "accepted" | "revoked" | "expired";
+
+export interface ReceptionistInvitation {
+  invitation_id: number;
+  clinic_id: number;
+  email: string;
+  token_hash: string;
+  status: InvitationStatus;
+  expires_at: string;
+  created_by_user_id: number;
+  accepted_at?: string | null;
+  created_at: string;
+  clinic?: Clinic;
+}
+
 export interface Patient {
   patient_id: number;
   user_id: number;
@@ -30,6 +62,7 @@ export interface Patient {
 export interface Doctor {
   doctor_id: number;
   user_id: number;
+  clinic_id?: number | null;
   specialization: string;
   qualification: string;
   experience_years: number;
@@ -43,6 +76,7 @@ export interface Doctor {
   wave_interval_minutes?: number;
   created_at?: string;
   user?: Pick<User, "full_name" | "email" | "phone">;
+  clinic?: Clinic;
 }
 
 export interface Availability {
@@ -56,7 +90,11 @@ export interface Availability {
   is_wave?: boolean;
   wave_capacity?: number;
   wave_booked_count?: number;
+  parent_availability_id?: number | null;
+  is_blocked?: boolean;
+  block_reason?: string | null;
   created_at?: string;
+  subslots?: Availability[];
 }
 
 export interface Appointment {
@@ -71,6 +109,11 @@ export interface Appointment {
   rescheduled_from_id?: number | null;
   wave_number?: number | null;
   estimated_consult_time?: string | null;
+  booked_by_user_id?: number | null;
+  booked_by_role?: UserRole | null;
+  is_outside_schedule?: boolean;
+  requires_review?: boolean;
+  review_reason?: string | null;
   created_at: string;
   patient?: Patient & { user?: Pick<User, "full_name" | "email" | "phone"> };
   doctor?: Doctor & { user?: Pick<User, "full_name" | "email" | "phone"> };
@@ -86,6 +129,8 @@ export interface SessionUser {
   role: UserRole;
   patient_id?: number | null;
   doctor_id?: number | null;
+  receptionist_id?: number | null;
+  clinic_id?: number | null;
 }
 
 export type WaitingQueueStatus =

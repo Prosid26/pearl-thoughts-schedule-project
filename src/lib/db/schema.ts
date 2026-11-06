@@ -35,7 +35,87 @@ export const usersRelations = relations(users, ({ one }) => ({
     fields: [users.user_id],
     references: [doctors.user_id],
   }),
+  receptionist: one(receptionists, {
+    fields: [users.user_id],
+    references: [receptionists.user_id],
+  }),
 }));
+
+/**
+ * 1B. CLINICS TABLE
+ */
+export const clinics = pgTable("clinics", {
+  clinic_id: serial("clinic_id").primaryKey(),
+  name: varchar("name", { length: 150 }).notNull(),
+  address: text("address").notNull(),
+  phone: varchar("phone", { length: 30 }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const clinicsRelations = relations(clinics, ({ many }) => ({
+  doctors: many(doctors),
+  receptionists: many(receptionists),
+  invitations: many(receptionistInvitations),
+}));
+
+/**
+ * 1C. RECEPTIONISTS TABLE
+ */
+export const receptionists = pgTable("receptionists", {
+  receptionist_id: serial("receptionist_id").primaryKey(),
+  user_id: integer("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.user_id, { onDelete: "cascade" }),
+  clinic_id: integer("clinic_id")
+    .notNull()
+    .references(() => clinics.clinic_id, { onDelete: "cascade" }),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const receptionistsRelations = relations(receptionists, ({ one }) => ({
+  user: one(users, {
+    fields: [receptionists.user_id],
+    references: [users.user_id],
+  }),
+  clinic: one(clinics, {
+    fields: [receptionists.clinic_id],
+    references: [clinics.clinic_id],
+  }),
+}));
+
+/**
+ * 1D. RECEPTIONIST INVITATIONS TABLE (Expiring, Single-Use Secure Tokens)
+ */
+export const receptionistInvitations = pgTable("receptionist_invitations", {
+  invitation_id: serial("invitation_id").primaryKey(),
+  clinic_id: integer("clinic_id")
+    .notNull()
+    .references(() => clinics.clinic_id, { onDelete: "cascade" }),
+  email: varchar("email", { length: 255 }).notNull(),
+  token_hash: varchar("token_hash", { length: 255 }).notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | accepted | revoked | expired
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  created_by_user_id: integer("created_by_user_id")
+    .notNull()
+    .references(() => users.user_id, { onDelete: "cascade" }),
+  accepted_at: timestamp("accepted_at", { withTimezone: true }),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const receptionistInvitationsRelations = relations(
+  receptionistInvitations,
+  ({ one }) => ({
+    clinic: one(clinics, {
+      fields: [receptionistInvitations.clinic_id],
+      references: [clinics.clinic_id],
+    }),
+    createdByUser: one(users, {
+      fields: [receptionistInvitations.created_by_user_id],
+      references: [users.user_id],
+    }),
+  })
+);
 
 /**
  * 2. PATIENTS TABLE
@@ -69,6 +149,7 @@ export const doctors = pgTable("doctors", {
     .notNull()
     .unique()
     .references(() => users.user_id, { onDelete: "cascade" }),
+  clinic_id: integer("clinic_id").references(() => clinics.clinic_id, { onDelete: "set null" }),
   specialization: varchar("specialization", { length: 100 }).notNull(),
   qualification: varchar("qualification", { length: 150 }).notNull(),
   experience_years: integer("experience_years").notNull().default(0),
@@ -88,6 +169,10 @@ export const doctorsRelations = relations(doctors, ({ one, many }) => ({
   user: one(users, {
     fields: [doctors.user_id],
     references: [users.user_id],
+  }),
+  clinic: one(clinics, {
+    fields: [doctors.clinic_id],
+    references: [clinics.clinic_id],
   }),
   availabilities: many(availability),
   appointments: many(appointments),
@@ -111,13 +196,17 @@ export const availability = pgTable(
     is_wave: boolean("is_wave").notNull().default(false), // true if wave slot
     wave_capacity: integer("wave_capacity").notNull().default(1), // total max patients in this wave
     wave_booked_count: integer("wave_booked_count").notNull().default(0), // current accepted bookings
+    parent_availability_id: integer("parent_availability_id"), // links wave subslot to parent window
+    is_blocked: boolean("is_blocked").notNull().default(false),
+    block_reason: text("block_reason"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("doctor_date_slot_idx").on(
+    uniqueIndex("doctor_date_slot_window_idx").on(
       table.doctor_id,
       table.available_date,
-      table.start_time
+      table.start_time,
+      table.end_time
     ),
   ]
 );
@@ -154,6 +243,11 @@ export const appointments = pgTable("appointments", {
   rescheduled_from_id: integer("rescheduled_from_id"),
   wave_number: integer("wave_number"),
   estimated_consult_time: varchar("estimated_consult_time", { length: 10 }),
+  booked_by_user_id: integer("booked_by_user_id").references(() => users.user_id, { onDelete: "set null" }),
+  booked_by_role: varchar("booked_by_role", { length: 20 }),
+  is_outside_schedule: boolean("is_outside_schedule").notNull().default(false),
+  requires_review: boolean("requires_review").notNull().default(false),
+  review_reason: text("review_reason"),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -169,6 +263,10 @@ export const appointmentsRelations = relations(appointments, ({ one, many }) => 
   availability: one(availability, {
     fields: [appointments.availability_id],
     references: [availability.availability_id],
+  }),
+  bookedByUser: one(users, {
+    fields: [appointments.booked_by_user_id],
+    references: [users.user_id],
   }),
   payments: many(payments),
   refunds: many(refunds),
@@ -582,3 +680,12 @@ export type ScheduledReminderInsert = typeof scheduledReminders.$inferInsert;
 
 export type NotificationPreferenceSelect = typeof notificationPreferences.$inferSelect;
 export type NotificationPreferenceInsert = typeof notificationPreferences.$inferInsert;
+
+export type ClinicSelect = typeof clinics.$inferSelect;
+export type ClinicInsert = typeof clinics.$inferInsert;
+
+export type ReceptionistSelect = typeof receptionists.$inferSelect;
+export type ReceptionistInsert = typeof receptionists.$inferInsert;
+
+export type ReceptionistInvitationSelect = typeof receptionistInvitations.$inferSelect;
+export type ReceptionistInvitationInsert = typeof receptionistInvitations.$inferInsert;
