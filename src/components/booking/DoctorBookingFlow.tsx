@@ -76,6 +76,9 @@ export function DoctorBookingFlow({ doctor, availabilities, session }: Props) {
     formData.append("doctor_id", doctor.doctor_id.toString());
     formData.append("availability_id", selectedSlotId.toString());
     formData.append("reason", reason.trim());
+    if (selectedSlot) {
+      formData.append("slot_time", selectedSlot.start_time);
+    }
 
     try {
       const res = await bookAppointmentAction(null, formData);

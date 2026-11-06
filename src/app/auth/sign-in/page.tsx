@@ -35,7 +35,9 @@ export default function SignInPage() {
         if (res.data.role === "doctor") {
           router.push("/doctor/dashboard");
         } else if (res.data.role === "admin") {
-          router.push("/reception/dashboard");
+          router.push("/admin/dashboard");
+        } else if (res.data.role === "receptionist") {
+          router.push("/reception/workspace");
         } else {
           router.push("/patient/dashboard");
         }
@@ -83,11 +85,11 @@ export default function SignInPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             <button
               type="button"
               onClick={() => handleFillDemo("patient@demo.com")}
-              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors"
+              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors cursor-pointer"
             >
               <div className="font-bold text-[10px] text-ink truncate">
                 Aarav Sharma
@@ -98,7 +100,7 @@ export default function SignInPage() {
             <button
               type="button"
               onClick={() => handleFillDemo("doctor.ananya@demo.com")}
-              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors"
+              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors cursor-pointer"
             >
               <div className="font-bold text-[10px] text-forest truncate">
                 Dr. Ananya
@@ -108,13 +110,24 @@ export default function SignInPage() {
 
             <button
               type="button"
+              onClick={() => handleFillDemo("receptionist@demo.com")}
+              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors cursor-pointer"
+            >
+              <div className="font-bold text-[10px] text-teal-700 truncate">
+                Pooja K.
+              </div>
+              <div className="text-[9px] text-ink-muted">Receptionist</div>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleFillDemo("admin@demo.com")}
-              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors"
+              className="px-2 py-1.5 rounded-md border border-warm-border bg-white hover:bg-sage-light hover:border-forest/50 text-ink font-medium text-left truncate transition-colors cursor-pointer"
             >
               <div className="font-bold text-[10px] text-terracotta-dark truncate">
                 Sunita D.
               </div>
-              <div className="text-[9px] text-ink-muted">Reception Demo</div>
+              <div className="text-[9px] text-ink-muted">Admin Demo</div>
             </button>
           </div>
         </div>

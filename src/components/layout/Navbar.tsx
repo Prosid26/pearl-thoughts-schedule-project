@@ -137,14 +137,31 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                       <span>Manage Slots</span>
                     </Link>
                   </>
-                ) : session.role === "admin" ? (
+                ) : session.role === "receptionist" ? (
                   <Link
-                    href="/reception/dashboard"
+                    href="/reception/workspace"
                     className="btn-forest text-xs px-3.5 py-1.5 gap-1.5"
                   >
                     <Building className="w-3.5 h-3.5" />
-                    <span>Reception Queue</span>
+                    <span>Reception Workspace</span>
                   </Link>
+                ) : session.role === "admin" ? (
+                  <>
+                    <Link
+                      href="/admin/dashboard"
+                      className="btn-forest text-xs px-3.5 py-1.5 gap-1.5"
+                    >
+                      <Building className="w-3.5 h-3.5" />
+                      <span>Admin Dashboard</span>
+                    </Link>
+                    <Link
+                      href="/reception/dashboard"
+                      className="btn-ivory text-xs px-3.5 py-1.5 gap-1.5"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Queue</span>
+                    </Link>
+                  </>
                 ) : (
                   <>
                     <Link
@@ -265,14 +282,31 @@ export function Navbar({ session, dbMode }: NavbarProps) {
                       Manage Availability Slots
                     </Link>
                   </>
-                ) : session.role === "admin" ? (
+                ) : session.role === "receptionist" ? (
                   <Link
-                    href="/reception/dashboard"
+                    href="/reception/workspace"
                     onClick={() => setMobileMenuOpen(false)}
                     className="block px-3 py-2 text-sm font-semibold text-forest rounded-md bg-sage-light"
                   >
-                    Reception Queue
+                    Reception Workspace
                   </Link>
+                ) : session.role === "admin" ? (
+                  <>
+                    <Link
+                      href="/admin/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-3 py-2 text-sm font-semibold text-forest rounded-md bg-sage-light"
+                    >
+                      Admin Dashboard
+                    </Link>
+                    <Link
+                      href="/reception/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-3 py-2 text-sm font-medium text-ink rounded-md hover:bg-ivory-muted"
+                    >
+                      Reception Queue
+                    </Link>
+                  </>
                 ) : (
                   <>
                     <Link

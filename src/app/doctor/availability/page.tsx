@@ -15,7 +15,12 @@ export default async function DoctorAvailabilityPage() {
   }
 
   const doctor = await db.getDoctorById(session.doctor_id);
-  const availabilities = await db.getDoctorAvailability(session.doctor_id);
+  const availabilities = await db.getDoctorAvailability(
+    session.doctor_id,
+    undefined,
+    false,
+    "doctor"
+  );
 
   return (
     <div className="py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
